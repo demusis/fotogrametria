@@ -63,7 +63,7 @@ ui <- dashboardPage(
         fluidRow(
           plotOutput("scatterPlot"),
           plotOutput("histogramPlot"),
-          tableOutput("dataPreview")
+          plotOutput("histogramDistancia")
         )
       )
     )
@@ -317,34 +317,33 @@ server <- function(session, input, output) {
         labs(x = "Coordenada X", y = "Coordenada Y")
     })
     
-    # Histograma
-    # Ordenar os dados por 'serie' e 'ponto'
-    repeticoes_geradas <- repeticoes_geradas %>%
-      arrange(serie, ponto)
-    
-    # Agrupar os dados por 'serie' e aplicar a funcao 'distancia' a cada grupo
-    resultados <- repeticoes_geradas %>%
-      group_by(serie) %>%
-      summarise(Ax = x[1], Ay = y[1], Bx = x[2], By = y[2], Cx = x[3], Cy = y[3], Dx = x[4], Dy = y[4]) %>%
-      rowwise() %>%
-      mutate(distancia = distancia(Ax, Ay, Bx, By, Cx, Cy, Dx, Dy, l)) %>%
-      ungroup()
-    
-    # Remove valores NA e calcula a velocidade
-    dt <-  input$fim_quadro - input$inicio_quadro # Tempo entre os frames (s)
-    dt <-  dt/3600 # h
-    velocidade <- na.omit(resultados$distancia)/dt
-    
-    # Media
-    media <- mean(velocidade)
-    
-    # Percentis
-    percentis <- quantile(velocidade, c((1-input$nc)/2, 1-(1-input$nc)/2))
-    
-    velocidade <- as.data.frame(velocidade)
-    names(velocidade) <- "v"
-    
     output$histogramPlot <- renderPlot({
+      # Histograma
+      # Ordenar os dados por 'serie' e 'ponto'
+      repeticoes_geradas <- repeticoes_geradas %>%
+        arrange(serie, ponto)
+      
+      # Agrupar os dados por 'serie' e aplicar a funcao 'distancia' a cada grupo
+      resultados <<- repeticoes_geradas %>%
+        group_by(serie) %>%
+        summarise(Ax = x[1], Ay = y[1], Bx = x[2], By = y[2], Cx = x[3], Cy = y[3], Dx = x[4], Dy = y[4]) %>%
+        rowwise() %>%
+        mutate(distancia = distancia(Ax, Ay, Bx, By, Cx, Cy, Dx, Dy, l)) %>%
+        ungroup()
+      
+      # Remove valores NA e calcula a velocidade
+      dt <-  input$fim_quadro - input$inicio_quadro # Tempo entre os frames (s)
+      dt <-  dt/3600 # h
+      velocidade <- na.omit(resultados$distancia)/dt
+      
+      # Media
+      media <- mean(velocidade)
+      
+      # Percentis
+      percentis <- quantile(velocidade, c((1-input$nc)/2, 1-(1-input$nc)/2))
+      
+      velocidade <- as.data.frame(velocidade)
+      names(velocidade) <- "v"
       p1 <- ggplot(velocidade, aes(x = v)) +
         geom_histogram(binwidth = 0.5, color = "black", fill = "lightgray") +
         geom_vline(aes(xintercept = media), color = "blue", linetype = "dashed", linewidth = 0.5) +
@@ -377,10 +376,64 @@ server <- function(session, input, output) {
       p
       
     })
+  
+  
+  output$histogramDistancia <- renderPlot({
+    deslocamento <- as.data.frame(resultados$distancia*1000)
+    colnames(deslocamento) <- "d"
+    
+    # Media
+    media <- mean(deslocamento$d, na.rm = TRUE)
+    
+    # ECDF
+    ecdf_fun <- ecdf(deslocamento$d)
+    
+    # Percentil da média
+    percentil_media <- ecdf_fun(media)
+    
+    # Percentis
+    percentil <- quantile(deslocamento$d, 
+                          c((1-input$nc)/2, 1-(1-input$nc)/2),
+                          na.rm = TRUE)
+    
+    p <- ggplot(deslocamento, aes(x = d)) +
+      stat_ecdf(geom = "line", colour = "blue", size = 1) +
+      geom_hline(yintercept = percentil_media, 
+                 colour = "green", 
+                 linetype = "dashed", 
+                 size = 0.5) +
+      geom_hline(yintercept = (1-input$nc)/2, 
+                 colour = "red", 
+                 linetype = "dashed", 
+                 size = 0.5) +
+      geom_hline(yintercept = 1-(1-input$nc)/2, 
+                 colour = "red", 
+                 linetype = "dashed", 
+                 size = 0.5) +
+      labs(title = "Ogiva de Galton do deslocamento",
+           x = "Deslocamento (m)",
+           y = "Frequência Cumulativa") +
+      theme_minimal()
+    
+    p <- p + geom_text(aes(x = percentil[1], y = (1-input$nc)/2, 
+                           label = sprintf("%.2f", percentil[1])), 
+                       vjust = 0,
+                       hjust = 1)
+    
+    p <- p + geom_text(aes(x = media, y = percentil_media, 
+                           label = sprintf("%.2f", media)), 
+                       vjust = 0,
+                       hjust = 1)
+    
+    p <- p + geom_text(aes(x = percentil[2], y = 1-(1-input$nc)/2, 
+                           label = sprintf("%.2f", percentil[2])), 
+                       vjust = 0,
+                       hjust = 1)
+    p
+    
   })
   
-  
-  
+  })
 }
 
 # Execute a aplicação Shiny
