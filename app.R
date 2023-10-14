@@ -1,4 +1,5 @@
 library(base64enc)
+library(jpeg)
 library(shiny)
 library(shinydashboard)
 library(cowplot)
@@ -25,8 +26,8 @@ ui <- dashboardPage(
       fileInput("upload", "Escolha uma Imagem", 
                 buttonLabel = "Selecione...",
                 placeholder = "Nenhum arquivo selecionado",
-                accept = c("image/png", "image/jpeg")),
-      sliderInput("zoom_level", "Nível de Zoom", min = 1, max = 7, value = 1, step = 0.5)
+                accept = c("image/jpeg")),
+      # sliderInput("zoom_level", "Nível de Zoom", min = 1, max = 7, value = 1, step = 0.5)
     ),
     
     # Elementos de entrada para a segunda aba
@@ -61,6 +62,7 @@ ui <- dashboardPage(
       tabItem(
         tabName = "app2",
         fluidRow(
+          plotOutput("dispersaoCinza"),
           plotOutput("scatterPlot"),
           plotOutput("histogramPlot"),
           plotOutput("histogramDistancia")
@@ -69,6 +71,7 @@ ui <- dashboardPage(
     )
   )
 )
+
 
 # ------------------------------------------------------------------------------
 # Gera repeticoes usando uma distribuicao normal bivariada
@@ -97,6 +100,23 @@ gerar_repeticoes <- function(dados_originais, repeticoes) {
 
 # ------------------------------------------------------------------------------
 
+hex_cinza <- function(hex_colors) {
+  # Aplica a conversão a cada cor no vetor usando sapply
+  cinza_values <- sapply(hex_colors, function(hex_color) {
+    # Converte hexadecimal para RGB
+    rgb <- col2rgb(hex_color)
+    
+    # Converte RGB para cinza usando a fórmula de luminosidade
+    cinza <- (rgb[1,] + rgb[2,] + rgb[3,])/3
+    
+    return(round(cinza))
+  }, USE.NAMES = FALSE)
+  
+  return(cinza_values)
+}
+
+# ------------------------------------------------------------------------------
+
 # Calculo da distancia
 distancia <- function(Ax, Ay, Bx, By, Cx, Cy, Dx, Dy, l) {
   # Calcular as distancias euclidianas
@@ -120,42 +140,58 @@ rotacionar_pontos <- function(df, angulo) {
   return(df_rotacionado)
 }
 
-
-# Defina o servidor
+# Servidor
 server <- function(session, input, output) {
   
+  dimensoes <<- NULL
+  imgData <<- NULL
+  dados <<- NULL
+  
   # Lógica da primeira aplicação Shiny
-  coords <- reactiveVal(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), outlier = character(0)))
+  coords <- reactiveVal(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
   
   observeEvent(input$reset_btn, {
-    coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), outlier = character(0)))
+    coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
     reset("upload")
   })
   
   observeEvent(input$zoom_level, {
     # Resetar dados e gráficos quando o nível de zoom for alterado
-    coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), outlier = character(0)))
+    coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
   })
   
   output$imgOutput <- renderUI({
+    coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
+    
     imagem <- input$upload
     if (is.null(imagem)) return(NULL)
     
-    imgData <- dataURI(file = imagem$datapath, mime = imagem$type)
-    tags$img(src = imgData, id = "uploaded_img", 
-             width = paste0(500 * input$zoom_level, "px"), 
+    imagem <- input$upload
+    imgData <<- readJPEG(imagem$datapath)
+    
+    dimensoes_aux <- dim(imgData)
+    dimensoes <<- paste(dimensoes_aux[2], "x", dimensoes_aux[1])
+    
+    imgRaster <- dataURI(file = imagem$datapath, mime = imagem$type)
+    tags$img(src = imgRaster, id = "uploaded_img", 
+             # width = paste0(500 * input$zoom_level, "px"), 
              onclick = "Shiny.setInputValue('img_click', [event.offsetX, event.offsetY], {priority: 'event'});")
   })
   
+  
   observeEvent(input$img_click, {
     click <- input$img_click
-    
     current_rows <- nrow(coords())
     
     # Calcula o ponto no ciclo de 1-4
     point_in_cycle <- (current_rows %% 4) + 1
     
-    new_coords <- data.frame(ponto = point_in_cycle, x = click[1], y = click[2])
+    # Extrair a cor
+    clicked_color <- imgData[click[2], click[1], ]
+    clicked_color_hex <- rgb(clicked_color[1], clicked_color[2], clicked_color[3], maxColorValue = 1)
+    clicado_cinza <- mean(clicked_color)
+    
+    new_coords <- data.frame(ponto = point_in_cycle, x = click[1], y = click[2], cor = clicked_color_hex, cinza = clicado_cinza)
     
     # Determina se o ponto é um outlier em y
     if (nrow(coords()[coords()$ponto==new_coords$ponto,]) > 5) {
@@ -183,8 +219,9 @@ server <- function(session, input, output) {
   
   output$coordsTxt <- renderText({
     last_coord <- tail(coords(), 1)
-    if(nrow(last_coord) == 0) return("Nenhum ponto clicado ainda.")
-    paste("Ponto", last_coord$ponto, "- X:", last_coord$x, "Y:", last_coord$y)
+    if (nrow(last_coord) == 0) return("-") else
+       paste("Dimensões: ", dimensoes, ", Ponto", last_coord$ponto, ", X:", last_coord$x, ", Y:", last_coord$y)
+    
   })
   
   output$scatter_plot <- renderPlot({
@@ -193,15 +230,16 @@ server <- function(session, input, output) {
     ggplot(dados, aes(x = x, y = y, color = as.factor(ponto))) +
       geom_point(size = 4) +
       geom_smooth(method = "lm", se = FALSE, color = "black", aes(group = 1)) +
-      labs(color = "Ponto") +
+      labs(color = "Ponto", x = "Abscissas", y = "Ordenadas") +
       scale_color_manual(values = c("red", "blue", "green", "purple")) +
-      scale_y_reverse()  # Inverte o sentido do eixo y
+      scale_y_reverse() +  # Inverte o sentido do eixo y
+      theme_minimal()
   })
   
   # Download das coordenadas em CSV
   output$download_data <- downloadHandler(
     filename = function() {
-      paste("dados-", Sys.Date(), ".csv", sep="")
+      paste("pontos_", Sys.Date(), ".csv", sep="")
     },
     content = function(file) {
       write.csv(coords(), file, row.names = FALSE)
@@ -209,8 +247,8 @@ server <- function(session, input, output) {
   )
   
   output$pixel_coords <- renderTable({
-    coords()
-  }, rownames = TRUE)
+    print(coords())
+  }, rownames = FALSE)
   
   # ------------------------------------------------------------------------------  
 
@@ -232,8 +270,6 @@ server <- function(session, input, output) {
       } else if (!("x" %in% names(dados)) | !("y" %in% names(dados))) {
         return(print(dados))
       }}
-    
-    
 
     progress <- Progress$new(session, min=1, max=15)
     on.exit(progress$close())
@@ -268,13 +304,12 @@ server <- function(session, input, output) {
     inclinacao <- media_coeficientes[2]
     
     # Calcular o centro de gravidade por 'ponto'
-    centros_gravidade <- repeticoes_geradas %>%
+    cg <<- repeticoes_geradas %>%
       group_by(ponto) %>%
       summarise(centro_gravidade_x = mean(x), centro_gravidade_y = mean(y))
     
-    
     # Calcular o ponto na reta de regressao mais proximo do centro de gravidade
-    centros_gravidade <- centros_gravidade %>%
+    centros_gravidade <- cg %>%
       mutate(
         projecao_x = (centro_gravidade_x + inclinacao * centro_gravidade_y - inclinacao * intercepto) / (1 + inclinacao ^ 2),
         projecao_y = inclinacao * projecao_x + intercepto
@@ -306,6 +341,63 @@ server <- function(session, input, output) {
                                                    labels = c("A", "B", "C", "D"))
     
     # Plotar o grafico de dispersao com cores identificando os grupos e series
+    output$dispersaoCinza <- renderPlot({
+      # imgData <- readJPEG("~/Documentos/fotogrametria_dc-main/quadros_razao_cruzada.jpg")
+      dimensoes_aux <- dim(imgData)
+      
+      # Criando um data.frame para armazenar os resultados
+      resultados <- data.frame(x=integer(), y=integer(), cinza=numeric())
+      
+      # Regressão
+      regressao_deming <- deming(y ~ x, data = dados)
+      
+      # Extraia os coeficientes
+      beta_0 <- coef(regressao_deming)[1] # Intercepto
+      beta_1 <- coef(regressao_deming)[2] # Inclinação
+      
+      # Loop sobre os pixels
+      for (x_coord in 1:dimensoes_aux[2]) {
+        
+        # Prever o valor de y usando os coeficientes da regressão
+        predito_y <- beta_0 + beta_1 * x_coord
+        
+        # Se o y previsto estiver dentro das dimensões da imagem, extrair o valor de cinza
+        if (predito_y >= 1 & predito_y <= dimensoes_aux[1]) {
+          
+          # O valor de cinza pode ser extraído da matriz da imagem
+          # Convertendo para cinza: utilizando a média dos 3 canais, se necessário
+          cinza <- mean(imgData[predito_y, x_coord, 1:3])
+          
+          # Adicionando os resultados ao data.frame
+          resultados <- rbind(resultados, data.frame(x=x_coord, y=round(predito_y), cinza=cinza))
+        }
+      }
+      # Usando a inclinação para calcular o ângulo de rotação
+      angulo <- -atan(beta_1)
+      resultados_rotacionados <- rotacionar_pontos(resultados[, c(1, 2)], angulo)
+      resultados$rot <- resultados_rotacionados$x
+      
+      cg_aux <- cg
+      colnames(cg_aux) <- c("ponto", "x", "y")
+      cg_aux <- rotacionar_pontos(cg_aux[, c(2, 3)], angulo)
+      cg_aux <- cg_aux[, 1]
+      colnames(cg_aux) <- "rot"
+      cg_aux <- cg_aux %>%
+        arrange(rot) %>%
+        mutate(label = LETTERS[1:n()])
+      
+      ggplot(resultados, aes(x=rot, y=cinza)) +
+        geom_point(size=0.5) +
+        geom_line(color="blue") +
+        labs(title="Tom de cinza médio por abscissas rotacionadas",
+             x="Abscissas rotacionadas",
+             y="Tom de cinza") +
+        geom_vline(data=cg_aux, aes(xintercept=rot), linetype="dashed", color="red") +
+        geom_text(data=cg_aux, aes(x=rot, label=label), vjust=7, hjust=1.5, size = 5, color="red") +
+        theme_minimal()
+    })
+    
+    # Plotar o grafico de dispersao com cores identificando os grupos e series
     output$scatterPlot <- renderPlot({
       ggplot(repeticoes_geradas_rotacionadas, aes(x = x, y = y)) +
         geom_hex(bins = 120, aes(fill = ..count..)) +
@@ -313,8 +405,9 @@ server <- function(session, input, output) {
         geom_abline(intercept = intercepto, slope = inclinacao, color = "black") +
         geom_point(data = centros_gravidade_rotacionados, aes(x = x, y = y), color = "lightblue", shape = 7, size = 1) +
         geom_text(data = centros_gravidade_rotacionados, aes(x = x, label = ponto), 
-                  vjust = -0.25, hjust = 1.5, color = "black") +
-        labs(x = "Coordenada X", y = "Coordenada Y")
+                  vjust = -0.25, hjust = 1.5, size = 5, color = "red") +
+        labs(x = "Abscissas rotacionadas", y = "Ordenadas rotacionada") +
+        theme_minimal()
     })
     
     output$histogramPlot <- renderPlot({
@@ -349,10 +442,10 @@ server <- function(session, input, output) {
         geom_vline(aes(xintercept = media), color = "blue", linetype = "dashed", linewidth = 0.5) +
         geom_vline(aes(xintercept = percentis[1]), color = "red", linetype = "dashed", linewidth = 0.5) +
         geom_vline(aes(xintercept = percentis[2]), color = "red", linetype = "dashed", linewidth = 0.5) +
-        annotate("text", x = media, y = Inf, label = paste(round(media, 1)), vjust = 2, color = "black", size = 4) +
-        annotate("text", x = percentis[1], y = Inf, label = paste(round(percentis[1],1)), vjust = 3, color = "black", size = 4) +
-        annotate("text", x = percentis[2], y = Inf, label = paste(round(percentis[2],1)), vjust = 3, color = "black", size = 4) +
-        labs(x = "Velocidade (km/h)", y = "Frequencia") +
+        annotate("text", x = media, y = Inf, label = paste(round(media, 1)), vjust = 2, color = "black", size = 5) +
+        annotate("text", x = percentis[1], y = Inf, label = paste(round(percentis[1],1)), vjust = 3, color = "black", size = 5) +
+        annotate("text", x = percentis[2], y = Inf, label = paste(round(percentis[2],1)), vjust = 3, color = "black", size = 5) +
+        labs(x = "Velocidade (km/h)", y = "Frequência") +
         theme_minimal()
       
       # Removendo o eixo x do histograma
@@ -412,23 +505,26 @@ server <- function(session, input, output) {
                  size = 0.5) +
       labs(title = "Ogiva de Galton do deslocamento",
            x = "Deslocamento (m)",
-           y = "Frequência Cumulativa") +
+           y = "Frequência Acumulada") +
       theme_minimal()
     
     p <- p + geom_text(aes(x = percentil[1], y = (1-input$nc)/2, 
                            label = sprintf("%.2f", percentil[1])), 
                        vjust = 0,
-                       hjust = 1)
+                       hjust = 0, 
+                       size = 5)
     
     p <- p + geom_text(aes(x = media, y = percentil_media, 
                            label = sprintf("%.2f", media)), 
                        vjust = 0,
-                       hjust = 1)
+                       hjust = 1, 
+                       size = 5)
     
     p <- p + geom_text(aes(x = percentil[2], y = 1-(1-input$nc)/2, 
                            label = sprintf("%.2f", percentil[2])), 
                        vjust = 0,
-                       hjust = 1)
+                       hjust = 1, 
+                       size = 5)
     p
     
   })
