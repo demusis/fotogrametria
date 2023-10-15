@@ -3,6 +3,7 @@ library(jpeg)
 library(shiny)
 library(shinydashboard)
 library(cowplot)
+library(imager)
 library(MASS)
 library(deming)
 library(dplyr)
@@ -27,12 +28,14 @@ ui <- dashboardPage(
                 buttonLabel = "Selecione...",
                 placeholder = "Nenhum arquivo selecionado",
                 accept = c("image/jpeg")),
-      # sliderInput("zoom_level", "Nível de Zoom", min = 1, max = 7, value = 1, step = 0.5)
+      actionButton("apagar_botao", "Apagar último ponto"),
     ),
     
     # Elementos de entrada para a segunda aba
     conditionalPanel(
       condition = "input.tabs === 'app2'",
+      sliderInput("dp", "dp", min = 0, max = 100, value = 0, step = 1),
+      tags$hr(),
       fileInput("arq", "Arquivo com coordenadas dos pontos:",
                 buttonLabel = "Selecione...",
                 placeholder = "Nenhum arquivo selecionado",
@@ -43,7 +46,8 @@ ui <- dashboardPage(
       tags$hr(),
       numericInput("rep_mc", "Número de repetições pelo MMC:", value = 100, min = 1, max = 10000),
       numericInput("nc", "Nível de confiança:", value = 0.99, min = 0.00001, max = 0.99999),
-      actionButton("calcular_botao", "Calcular!")
+      actionButton("calcular_botao", "Calcular!"),
+
     )
   ),
   dashboardBody(
@@ -150,14 +154,12 @@ server <- function(session, input, output) {
   # Lógica da primeira aplicação Shiny
   coords <- reactiveVal(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
   
-  observeEvent(input$reset_btn, {
-    coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
-    reset("upload")
-  })
-  
-  observeEvent(input$zoom_level, {
-    # Resetar dados e gráficos quando o nível de zoom for alterado
-    coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
+  observeEvent(input$apagar_botao, {
+    dados <- coords()
+    if (nrow(dados) > 0) {
+      dados <- dados[-nrow(dados), ]
+      coords(dados)
+    }
   })
   
   output$imgOutput <- renderUI({
@@ -168,6 +170,12 @@ server <- function(session, input, output) {
     
     imagem <- input$upload
     imgData <<- readJPEG(imagem$datapath)
+    
+    img <- load.image(imagem$datapath)
+    smoothed_img <- isoblur(img, sigma = input$dp)
+    
+    imager::save.image(smoothed_img, "aux.jpg")
+    imgData <<- readJPEG("aux.jpg")
     
     dimensoes_aux <- dim(imgData)
     dimensoes <<- paste(dimensoes_aux[2], "x", dimensoes_aux[1])
@@ -227,14 +235,17 @@ server <- function(session, input, output) {
   output$scatter_plot <- renderPlot({
     dados <<- coords()
     if (nrow(dados) == 0) return(NULL)
-    ggplot(dados, aes(x = x, y = y, color = as.factor(ponto))) +
-      geom_point(size = 4) +
+    ggplot(dados, aes(x = x, y = y)) +
+      geom_point(aes(shape = as.factor(ponto), color = as.factor(ponto)), size = 4) +
       geom_smooth(method = "lm", se = FALSE, color = "black", aes(group = 1)) +
-      labs(color = "Ponto", x = "Abscissas", y = "Ordenadas") +
+      labs(shape = "Ponto", color = "Ponto", x = "Abscissas", y = "Ordenadas") +
+      scale_shape_manual(values = c(16, 17, 18, 19)) + 
       scale_color_manual(values = c("red", "blue", "green", "purple")) +
-      scale_y_reverse() +  # Inverte o sentido do eixo y
+      scale_y_reverse() + 
       theme_minimal()
   })
+  
+  
   
   # Download das coordenadas em CSV
   output$download_data <- downloadHandler(
@@ -342,7 +353,13 @@ server <- function(session, input, output) {
     
     # Plotar o grafico de dispersao com cores identificando os grupos e series
     output$dispersaoCinza <- renderPlot({
-      # imgData <- readJPEG("~/Documentos/fotogrametria_dc-main/quadros_razao_cruzada.jpg")
+      imagem <- input$upload
+      img <- load.image(imagem$datapath)
+      smoothed_img <- isoblur(img, sigma = input$dp)
+      
+      imager::save.image(smoothed_img, "aux.jpg")
+      imgData <<- readJPEG("aux.jpg")
+      
       dimensoes_aux <- dim(imgData)
       
       # Criando um data.frame para armazenar os resultados
@@ -386,9 +403,10 @@ server <- function(session, input, output) {
         arrange(rot) %>%
         mutate(label = LETTERS[1:n()])
       
+      spline_data <- smooth.spline(resultados$rot, resultados$cinza, cv = TRUE)
       ggplot(resultados, aes(x=rot, y=cinza)) +
-        geom_point(size=0.5) +
-        geom_line(color="blue") +
+        geom_point(size=0.3, color="black") +
+        geom_line(data = data.frame(x = spline_data$x, y = spline_data$y), aes(x=x, y=y), color="blue") +
         labs(title="Tom de cinza médio por abscissas rotacionadas",
              x="Abscissas rotacionadas",
              y="Tom de cinza") +
