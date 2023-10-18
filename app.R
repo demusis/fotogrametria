@@ -29,12 +29,13 @@ ui <- dashboardPage(
                 placeholder = "Nenhum arquivo selecionado",
                 accept = c("image/jpeg")),
       actionButton("apagar_botao", "Apagar último ponto"),
+      actionButton("apagar_tudo", "Apagar tudo"),
     ),
     
     # Elementos de entrada para a segunda aba
     conditionalPanel(
       condition = "input.tabs === 'app2'",
-      sliderInput("dp", "dp", min = 0, max = 100, value = 0, step = 1),
+      sliderInput("dp", "Filtro gaussiano isotrópico, desvio padrão:", min = 0, max = 100, value = 0, step = 1),
       tags$hr(),
       fileInput("arq", "Arquivo com coordenadas dos pontos:",
                 buttonLabel = "Selecione...",
@@ -151,8 +152,14 @@ server <- function(session, input, output) {
   imgData <<- NULL
   dados <<- NULL
   
+  imgStore <- reactiveVal(NULL)
+  
   # Lógica da primeira aplicação Shiny
   coords <- reactiveVal(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
+  
+  observeEvent(input$upload, {
+    imgStore(readJPEG(input$upload$datapath))
+  })
   
   observeEvent(input$apagar_botao, {
     dados <- coords()
@@ -162,28 +169,38 @@ server <- function(session, input, output) {
     }
   })
   
+  observeEvent(input$apagar_tudo, {
+    coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
+    imgData <<- NULL
+      if (file.exists(input$upload$datapath)) {
+        for (i in 1:7) {
+          file_size <- file.info(input$upload$datapath)$size  # Obtém o tamanho do arquivo em bytes
+          writeBin(as.raw(runif(file_size, min=0, max=255)), input$upload$datapath)
+        }
+        file.remove(input$upload$datapath)
+      }
+    imgStore(NULL)
+  })
+  
   output$imgOutput <- renderUI({
+    imagem <- imgStore()
+    if (is.null(imagem)) return(NULL)
+    
     coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
     
     imagem <- input$upload
-    if (is.null(imagem)) return(NULL)
-    
-    imagem <- input$upload
     imgData <<- readJPEG(imagem$datapath)
-    
-    img <- load.image(imagem$datapath)
-    smoothed_img <- isoblur(img, sigma = input$dp)
-    
-    imager::save.image(smoothed_img, "aux.jpg")
-    imgData <<- readJPEG("aux.jpg")
     
     dimensoes_aux <- dim(imgData)
     dimensoes <<- paste(dimensoes_aux[2], "x", dimensoes_aux[1])
     
     imgRaster <- dataURI(file = imagem$datapath, mime = imagem$type)
+    
+    tags$div(style = "width: 100%; height: auto; overflow-x: auto; overflow-y: hidden;",
     tags$img(src = imgRaster, id = "uploaded_img", 
              # width = paste0(500 * input$zoom_level, "px"), 
              onclick = "Shiny.setInputValue('img_click', [event.offsetX, event.offsetY], {priority: 'event'});")
+    )
   })
   
   
@@ -354,11 +371,13 @@ server <- function(session, input, output) {
     # Plotar o grafico de dispersao com cores identificando os grupos e series
     output$dispersaoCinza <- renderPlot({
       imagem <- input$upload
-      img <- load.image(imagem$datapath)
+      img <- imager::load.image(imagem$datapath)
       smoothed_img <- isoblur(img, sigma = input$dp)
-      
-      imager::save.image(smoothed_img, "aux.jpg")
-      imgData <<- readJPEG("aux.jpg")
+
+      temp_file <- tempfile(pattern = "aux", fileext = ".jpg")
+      imager::save.image(smoothed_img, temp_file)
+      imgData <<- as.array(readJPEG(temp_file))
+      unlink(temp_file)
       
       dimensoes_aux <- dim(imgData)
       
