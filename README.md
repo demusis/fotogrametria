@@ -2,6 +2,8 @@
 
 Este repositório GitHub oferece uma aplicação inovador para a estimativa da velocidade de veículos em movimento linear, aplicando princípios matemáticos e estatísticos. Ideal para uso em investigações forenses e estudos de engenharia de tráfego, este método se destaca por sua precisão e aplicabilidade diversificada.
 
+Autores: Carlo Ralph De Musis, Tadeu Gross e Ozlean Dantas.
+
 ## Como Utilizar a Fotogrametria na Estimação de Velocidade:
 A fotogrametria, técnica de medição de distâncias e objetos a partir de imagens fotográficas, é essencial aqui. Você pode usar imagens de vídeo para determinar precisamente as coordenadas espaciais das marcações nas rodas dos veículos. Utilizando a "razão cruzada", um conceito fundamental na fotogrametria, você pode relacionar a posição destas marcações com o tempo decorrido entre os quadros de vídeo, estabelecendo uma base para a estimativa de velocidade.
 
