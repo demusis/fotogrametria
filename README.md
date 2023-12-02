@@ -32,7 +32,7 @@ Para instalar o aplicativo em seu próprio servidor Shiny, siga as instruções 
 
 5. Após ter todas as dependências instaladas e o código-fonte aberto no RStudio, você pode iniciar o aplicativo simplesmente clicando no botão "Run App" no painel superior direito do RStudio. 
 
-Para fins de demonstração, a aplicação também está disponível online no site https://demusis.shinyapps.io/fotogrametria/.
+Para fins de demonstração, a aplicação está disponível online no site https://demusis.shinyapps.io/fotogrametria/.
 
 ## Referência:
 Rubinstein, R. Y., & Kroese, D. P. (2016). Simulation and the Monte Carlo Method. Wiley Series in Probability and Statistics. John Wiley & Sons, Inc.
