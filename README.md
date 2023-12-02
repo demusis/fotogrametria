@@ -1,29 +1,38 @@
-# Estimação Forense de Velocidade Veicular com Base em Modelos Estatísticos e Análise de Reflectância
+**Estimativa Forense da Velocidade Veicular Usando Fotogrametria, Modelos Estatísticos de Distribuição Normal Bivariada e Análise de Reflectância**
 
-A aplicação aqui apresentada  visa estimar a velocidade de veículos em movimento linear com base em princípios matemáticos e estatísticos. Esta aplicação é útil em investigações forenses, estudos de engenharia de tráfego e avaliação da qualidade dos dados em diversas áreas.
+Este repositório GitHub oferece uma aplicação inovador para a estimativa da velocidade de veículos em movimento linear, aplicando princípios matemáticos e estatísticos. Ideal para uso em investigações forenses e estudos de engenharia de tráfego, este método se destaca por sua precisão e aplicabilidade diversificada.
 
-**Fotogrametria:**
+**Como Utilizar a Fotogrametria na Estimação de Velocidade:**
+A fotogrametria, técnica de medição de distâncias e objetos a partir de imagens fotográficas, é essencial aqui. Você pode usar imagens de vídeo para determinar precisamente as coordenadas espaciais das marcações nas rodas dos veículos. Utilizando a "razão cruzada", um conceito fundamental na fotogrametria, você pode relacionar a posição destas marcações com o tempo decorrido entre os quadros de vídeo, estabelecendo uma base para a estimativa de velocidade.
 
-A fotogrametria é um conceito fundamental nesta aplicação. Ela é uma técnica que envolve a medição de objetos e distâncias a partir de imagens fotográficas. No contexto da nossa aplicação, a fotogrametria é usada para estimar a posição das rodas de um veículo com base em imagens capturadas em quadros de vídeo. Através da análise das imagens, podemos determinar com precisão as coordenadas espaciais das marcações feitas nas rodas, o que é crucial para calcular a velocidade do veículo.
+**Integração de Marcações Temporais dos Quadros:**
+É importante que você forneça informações temporais exatas de cada quadro de vídeo analisado. Essas informações serão utilizadas para calcular a velocidade escalar média do veículo, combinando-as com a posição das marcações nas rodas.
 
-A razão cruzada é um procedimento utilizado na fotogrametria e, no caso, envolve a análise das posições relativas das marcações feitas nas rodas do veículo. Supõe-se que essas marcações estejam dispostas colinearmente em relação ao deslocamento do veículo. A razão cruzada permite relacionar a posição das marcações com o tempo decorrido entre os quadros de vídeo, fornecendo uma base sólida para a estimativa da velocidade.
+**Aplicação da Distribuição Normal Bivariada e Método de Monte Carlo:**
+Você começa enviando dois quadros de vídeo que representem momentos-chave para a estimativa de velocidade e distância. Após corrigir distorções da câmera, os centros das rodas (A, B, C, D) são identificados nas imagens. Assumindo uma disposição colinear destas marcações, a aplicação apresenta um gráfico de dispersão com uma regressão ortogonal para avaliação da qualidade do ajuste.
 
-Marcações Temporais dos Quadros:
-
-Para realizar a análise, a aplicação requer que o usuário forneça informações temporais relacionadas a cada quadro de vídeo selecionado. Essas informações temporais são essenciais para calcular a velocidade do veículo, uma vez que representam a variação no tempo entre os quadros. Essas marcações temporais são usadas em conjunto com as posições das marcações das rodas para estimar a velocidade escalar média do veículo de maneira precisa.
-
-**Estimativa da Distribuição Normal Bivariada e Método de Monte Carlo:**
-
-O processo inicia com o envio do usuário de um composição de dois quadros de vídeo correspondentes aos montentos no qual deseja-se estimar a velocidade e distância de um veículo lá presente. Cabe também ao usuários a aplicação de correções geométricas para corrigir distorções da câmera. Em seguida, na aplicação, os centros das rodas do veículo (A, B, C e D) são, repetidas vezes, identificados e marcados nas imagens, com a suposição de que essas marcações estejam dispostas colinearmente (pressuposto da razão cruzada). A qualidade do ajuste é avaliada por uma regressão ortogonal
-
-Com esses dados, estimamos distribuições normais bivariadas que modelam conjuntamente as posições das rodas nos eixos X e Y. Essas distribuições levam em consideração a variabilidade e a covariância das posições, capturando a incerteza nas estimativas.
-
-Em seguida, aplicamos o método de Monte Carlo, gerando um grande número de pontos simulados com base nessas distribuições. Essas simulações criam cenários virtuais nos quais as posições das rodas variam de acordo com a incerteza das estimativas. Com repetidas simulações, acumulamos uma grande quantidade de pontos que representam possíveis configurações das rodas, permitindo-nos calcular intervalos de confiança para a velocidade média do veículo e a distância entre os frames.
+A aplicação utiliza modelos de distribuição normal bivariada para as posições das rodas nos eixos X e Y, considerando a variabilidade e a covariância. O método de Monte Carlo é então aplicado, gerando múltiplas simulações que refletem a incerteza nas estimativas das posições das rodas. Essas simulações ajudam a calcular intervalos de confiança para a velocidade média do veículo e a distância entre os quadros.
 
 **Análise da Reflectância dos Centros das Rodas:**
+È fornecida uma análise da reflectância dos centros das rodas, útil quando estes apresentam características de contraste ou refletância distintas do ambiente circundante.
 
-Além da estimativa das posições das rodas, a aplicação realiza uma análise adicional da reflectância dos centros das rodas. Isso é particularmente útil quando os centros das rodas apresentam características de contraste ou refletância distintas em relação ao ambiente circundante.
+**Determinação de Intervalos de Confiança:**
+Os intervalos de confiança, derivados dos pontos simulados pelo método de Monte Carlo, oferecem estimativas estatísticas confiáveis da velocidade média do veículo e a distância percorrida entre os quadros.
 
-**Intervalos de Confiança:**
+**Instalação:**
+Para instalar o aplicativo em seu próprio servidor Shiny, siga as instruções a seguir:
 
-Por fim, os intervalos de confiança são calculados com base nos pontos simulados gerados pelo método de Monte Carlo. Esses intervalos fornecem estimativas estatísticas da faixa provável para a velocidade média do veículo e a distância do veículo analisado entre os quadros.
+1. Baixe o código-fonte.
+
+2. Abra a IDE RStudio, aqui adotado como sugestão, em seu computador, certificando-se de que você tenha uma distribuição padrão do R instalada.
+
+3. No RStudio, abra o arquivo "app.R" que você baixou do GitHub.
+
+4. Verifique se todas as dependências necessárias, como os pacotes Shiny, rgdal, rgeos, raster, sp, shinydashboard, shinyjs e shinyWidgets, estão instaladas em seu ambiente de desenvolvimento. Caso contrário, instale-as usando o as funcionalidade do RStudio ou utilizando no terminal o comando 'install.packages'.
+
+5. Após ter todas as dependências instaladas e o código-fonte aberto no RStudio, você pode iniciar o aplicativo simplesmente clicando no botão "Run App" no painel superior direito do RStudio. 
+
+Para fins de demonstração, a aplicação também está disponível online no site https://demusis.shinyapps.io/fotogrametria/.
+
+**Referências:**
+Rubinstein, R. Y., & Kroese, D. P. (2016). Simulation and the Monte Carlo Method. Wiley Series in Probability and Statistics. John Wiley & Sons, Inc.
