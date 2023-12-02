@@ -13,7 +13,7 @@ Você começa enviando dois quadros de vídeo que representem momentos-chave par
 
 A aplicação utiliza modelos de distribuição normal bivariada para as posições das rodas nos eixos X e Y, considerando a variabilidade e a covariância. O método de Monte Carlo é então aplicado, gerando múltiplas simulações que refletem a incerteza nas estimativas das posições das rodas. Essas simulações ajudam a calcular intervalos de confiança para a velocidade média do veículo e a distância entre os quadros.
 
-## Análise da Reflectância dos Centros das Rodas:**
+## Análise da Reflectância dos Centros das Rodas:
 È fornecida uma análise da reflectância dos centros das rodas, útil quando estes apresentam características de contraste ou refletância distintas do ambiente circundante.
 
 ## Determinação de Intervalos de Confiança:
@@ -34,5 +34,5 @@ Para instalar o aplicativo em seu próprio servidor Shiny, siga as instruções 
 
 Para fins de demonstração, a aplicação também está disponível online no site https://demusis.shinyapps.io/fotogrametria/.
 
-## Referências:
+## Referência:
 Rubinstein, R. Y., & Kroese, D. P. (2016). Simulation and the Monte Carlo Method. Wiley Series in Probability and Statistics. John Wiley & Sons, Inc.
