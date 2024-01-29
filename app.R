@@ -9,6 +9,8 @@ library(deming)
 library(dplyr)
 library(ggplot2)
 
+library(grid)
+
 # Defina a UI
 ui <- dashboardPage(
   dashboardHeader(title = "GPAV/POLITEC/MT"),
@@ -60,6 +62,7 @@ ui <- dashboardPage(
           uiOutput("imgOutput"),
           verbatimTextOutput("coordsTxt"),
           plotOutput("scatter_plot"),
+          verbatimTextOutput("regressaoTxt"),
           tableOutput("pixel_coords"),
           downloadButton("download_data", "Download das Coordenadas")
         )
@@ -184,6 +187,7 @@ server <- function(session, input, output) {
   
   output$imgOutput <- renderUI({
     imagem <- imgStore()
+    
     if (is.null(imagem)) return(NULL)
     
     coords(data.frame(ponto = integer(0), x = numeric(0), y = numeric(0), cor = character(0), cinza = numeric(0), outlier = character(0)))
@@ -191,7 +195,7 @@ server <- function(session, input, output) {
     imagem <- input$upload
     imgData <<- readJPEG(imagem$datapath)
     
-    dimensoes_aux <- dim(imgData)
+    dimensoes_aux <<- dim(imgData)
     dimensoes <<- paste(dimensoes_aux[2], "x", dimensoes_aux[1])
     
     imgRaster <- dataURI(file = imagem$datapath, mime = imagem$type)
@@ -252,17 +256,43 @@ server <- function(session, input, output) {
   output$scatter_plot <- renderPlot({
     dados <<- coords()
     if (nrow(dados) == 0) return(NULL)
+    dados$ponto <- factor(dados$ponto, levels = c(1, 2, 3, 4), labels = c('A', 'B', 'C', 'D'))
+    
+    # imagem_grob <- rasterGrob(imgStore(), interpolate = TRUE)
+    
+    # Calcular o centro de gravidade em Y
+    # centro_gravidade_y <- mean(dados$y)
+    
+    # Refletir os valores de Y em relação ao centro de gravidade
+    # dados$y_refletido <- 2 * centro_gravidade_y - dados$y
+    
+    # Plotar o gráfico com os valores de Y transformados
     ggplot(dados, aes(x = x, y = y)) +
-      geom_point(aes(shape = as.factor(ponto), color = as.factor(ponto)), size = 4) +
-      geom_smooth(method = "lm", se = FALSE, color = "black", aes(group = 1)) +
+      # annotation_custom(imagem_grob, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf) + 
+      geom_point(aes(shape = ponto, color = as.factor(ponto)), size = 4) +
+      geom_smooth(method = "lm", se = TRUE, color = "black", aes(group = 1)) +
       labs(shape = "Ponto", color = "Ponto", x = "Abscissas", y = "Ordenadas") +
       scale_shape_manual(values = c(16, 17, 18, 19)) + 
       scale_color_manual(values = c("red", "blue", "green", "purple")) +
-      scale_y_reverse() + 
+      scale_y_reverse() +
       theme_minimal()
   })
   
-  
+  output$regressaoTxt <- renderText({
+    last_coord <- tail(coords(), 1)
+    if (nrow(last_coord) == 0) return("-") else {
+      dados <- coords() # Obtenha os dados do dataframe
+      modelo <- lm(y ~ x, data = dados)
+      eq <- paste("Equação: y =",
+                  round(coef(modelo)[1], 5), "+",
+                  round(coef(modelo)[2], 5), "*x")
+      r2 <- paste("R² =", round(summary(modelo)$r.squared, 5))
+      aic <- paste("AIC =", round(AIC(modelo), 5))
+      paste(eq, r2, aic, sep = "\n")
+    }
+      
+    
+  })
   
   # Download das coordenadas em CSV
   output$download_data <- downloadHandler(
@@ -275,7 +305,9 @@ server <- function(session, input, output) {
   )
   
   output$pixel_coords <- renderTable({
-    print(coords())
+    dados <<- coords()
+    dados$ponto <- factor(dados$ponto, levels = c(1, 2, 3, 4), labels = c('A', 'B', 'C', 'D'))
+    print(dados)
   }, rownames = FALSE)
   
   # ------------------------------------------------------------------------------  
@@ -443,7 +475,7 @@ server <- function(session, input, output) {
         geom_point(data = centros_gravidade_rotacionados, aes(x = x, y = y), color = "lightblue", shape = 7, size = 1) +
         geom_text(data = centros_gravidade_rotacionados, aes(x = x, label = ponto), 
                   vjust = -0.25, hjust = 1.5, size = 5, color = "red") +
-        labs(x = "Abscissas rotacionadas", y = "Ordenadas rotacionada") +
+        labs(x = "Abscissas rotacionadas", y = "Ordenadas rotacionadas") +
         theme_minimal()
     })
     
