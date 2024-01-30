@@ -8,6 +8,7 @@ library(MASS)
 library(deming)
 library(dplyr)
 library(ggplot2)
+library(tidyr)
 
 library(grid)
 
@@ -61,10 +62,10 @@ ui <- dashboardPage(
         fluidRow(
           uiOutput("imgOutput"),
           verbatimTextOutput("coordsTxt"),
-          plotOutput("scatter_plot"),
-          verbatimTextOutput("regressaoTxt"),
           tableOutput("pixel_coords"),
-          downloadButton("download_data", "Download das Coordenadas")
+          downloadButton("download_data", "Download das Coordenadas"),
+          verbatimTextOutput("regressaoTxt"),
+          plotOutput("scatter_plot")
         )
       ),
       tabItem(
@@ -256,27 +257,35 @@ server <- function(session, input, output) {
   output$scatter_plot <- renderPlot({
     dados <<- coords()
     if (nrow(dados) == 0) return(NULL)
+    
     dados$ponto <- factor(dados$ponto, levels = c(1, 2, 3, 4), labels = c('A', 'B', 'C', 'D'))
+    dados$y_mod <- dimensoes_aux[1] - dados$y
     
-    # imagem_grob <- rasterGrob(imgStore(), interpolate = TRUE)
+    imagem_grob <- rasterGrob(imgStore(), width = unit(1, "npc"), height = unit(1, "npc"), interpolate = TRUE)
     
-    # Calcular o centro de gravidade em Y
-    # centro_gravidade_y <- mean(dados$y)
-    
-    # Refletir os valores de Y em relação ao centro de gravidade
-    # dados$y_refletido <- 2 * centro_gravidade_y - dados$y
-    
+    xmin <- 0
+    xmax <- dimensoes_aux[2]
+    ymin <- 0
+    ymax <- dimensoes_aux[1]
+      
+     
     # Plotar o gráfico com os valores de Y transformados
-    ggplot(dados, aes(x = x, y = y)) +
-      # annotation_custom(imagem_grob, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf) + 
-      geom_point(aes(shape = ponto, color = as.factor(ponto)), size = 4) +
-      geom_smooth(method = "lm", se = TRUE, color = "black", aes(group = 1)) +
-      labs(shape = "Ponto", color = "Ponto", x = "Abscissas", y = "Ordenadas") +
-      scale_shape_manual(values = c(16, 17, 18, 19)) + 
+    ggplot(dados, aes(x = x, y = y_mod)) +
+      annotation_custom(imagem_grob, xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax) +
+      geom_smooth(method = "lm", se = FALSE, linetype = "dashed", color = "black", alpha = 0.5, aes(group = 1)) +
+      geom_point(aes(shape = ponto, color = ponto), size = 7, alpha = 0.5) +
+      labs(shape = "Pontos", color = "Pontos", x = "", y = "") +
+      scale_shape_manual(values = c(16, 17, 18, 19)) +
       scale_color_manual(values = c("red", "blue", "green", "purple")) +
-      scale_y_reverse() +
-      theme_minimal()
-  })
+      xlim(xmin, xmax) +  
+      ylim(ymin, ymax) +  
+      theme_minimal() +
+      coord_cartesian(xlim = c(xmin, xmax), ylim = c(ymin, ymax)) +
+      theme(axis.text.x = element_blank(), axis.text.y = element_blank(),
+            legend.title = element_text(size = 14),
+            legend.text = element_text(size = 14))
+    
+  }, height = 600)
   
   output$regressaoTxt <- renderText({
     last_coord <- tail(coords(), 1)
