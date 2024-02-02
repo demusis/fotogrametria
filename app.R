@@ -129,12 +129,24 @@ hex_cinza <- function(hex_colors) {
 # Calculo da distancia
 distancia <- function(Ax, Ay, Bx, By, Cx, Cy, Dx, Dy, l) {
   # Calcular as distancias euclidianas
-  dAC <- sqrt((Ax - Cx)^2 + (Ay - Cy)^2)
-  dBC <- sqrt((Bx - Cx)^2 + (By - Cy)^2)
-  dAD <- sqrt((Ax - Dx)^2 + (Ay - Dy)^2)
-  dBD <- sqrt((Bx - Dx)^2 + (By - Dy)^2)
+  # dAC <- sqrt((Ax - Cx)^2 + (Ay - Cy)^2)
+  # dBC <- (Bx-Cx)/abs(Bx-Cx)*sqrt((Bx - Cx)^2 + (By - Cy)^2)
+  # dAD <- sqrt((Ax - Dx)^2 + (Ay - Dy)^2)
+  # dBD <- sqrt((Bx - Dx)^2 + (By - Dy)^2)
+  # 
+  # k <- (dAC/dBC)/(dAD/dBD)
   
-  k <- (dAC/dBC)/(dAD/dBD)
+  A <- complex(real = Ax, imaginary =Ay)
+  B <- complex(real = Bx, imaginary =By)
+  C <- complex(real = Cx, imaginary =Cy)
+  D <- complex(real = Dx, imaginary =Dy)
+  
+  dAC <- C - A
+  dBC <- C - B
+  dAD <- D - A
+  dBD <- D - B
+  
+  k <- Re((dAC/dBC)/(dAD/dBD))
   
   d <- (k/(k-1)*l^2)^0.5
   return(d)
