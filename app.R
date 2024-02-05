@@ -260,7 +260,10 @@ server <- function(session, input, output) {
   })
   
   output$coordsTxt <- renderText({
-    last_coord <- tail(coords(), 1)
+    dados <<- coords()
+    dados$ponto <- factor(dados$ponto, levels = c(1, 2, 3, 4), labels = c('A', 'B', 'C', 'D'))
+    
+    last_coord <- tail(dados, 1)
     if (nrow(last_coord) == 0) return("-") else
        paste("Dimensões: ", dimensoes, ", Ponto", last_coord$ponto, ", X:", last_coord$x, ", Y:", last_coord$y)
     
@@ -311,8 +314,6 @@ server <- function(session, input, output) {
       aic <- paste("AIC =", round(AIC(modelo), 5))
       paste(eq, r2, aic, sep = "\n")
     }
-      
-    
   })
   
   # Download das coordenadas em CSV
@@ -321,7 +322,10 @@ server <- function(session, input, output) {
       paste("pontos_", Sys.Date(), ".csv", sep="")
     },
     content = function(file) {
-      write.csv(coords(), file, row.names = FALSE)
+      dados <<- coords()
+      dados$ponto <- factor(dados$ponto, levels = c(1, 2, 3, 4), labels = c('A', 'B', 'C', 'D'))
+      
+      write.csv(dados, file, row.names = FALSE)
     }
   )
   
