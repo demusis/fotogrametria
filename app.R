@@ -14,7 +14,7 @@ library(grid)
 
 # Defina a UI
 ui <- dashboardPage(
-  dashboardHeader(title = "GPAV/POLITEC/MT"),
+  dashboardHeader(title = "ERASMUS+SuCCESS"),
   dashboardSidebar(
     # Barra lateral com abas recolhíveis e dispositivos de entrada
     sidebarMenu(
