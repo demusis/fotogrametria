@@ -9,7 +9,6 @@ library(deming)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
-
 library(grid)
 
 # Defina a UI
