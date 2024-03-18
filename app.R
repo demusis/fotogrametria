@@ -5,10 +5,12 @@ library(shinydashboard)
 library(cowplot)
 library(imager)
 library(MASS)
+library(MVN)
 library(deming)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
+
 library(grid)
 
 # Defina a UI
@@ -43,9 +45,9 @@ ui <- dashboardPage(
                 buttonLabel = "Selecione...",
                 placeholder = "Nenhum arquivo selecionado",
                 accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv")),
-      numericInput("inicio_quadro", "Marcação temporal do quadro inicial (s):", value = 42.02, min = 0),
-      numericInput("fim_quadro", "Marcação temporal do quadro final (s):", value = 44.118, min = 0),
-      numericInput("dist_referencia", "Distância de referência (mm):", value = 1894, min = 0),
+      numericInput("inicio_quadro", "Marcação temporal do quadro inicial (s):", value = 1.266, min = 0),
+      numericInput("fim_quadro", "Marcação temporal do quadro final (s):", value = 1.866, min = 0),
+      numericInput("dist_referencia", "Distância de referência (mm):", value = 2002, min = 0.01),
       tags$hr(),
       numericInput("rep_mc", "Número de repetições pelo MMC:", value = 100, min = 1, max = 10000),
       numericInput("nc", "Nível de confiança:", value = 0.99, min = 0.00001, max = 0.99999),
@@ -61,9 +63,10 @@ ui <- dashboardPage(
         fluidRow(
           uiOutput("imgOutput"),
           verbatimTextOutput("coordsTxt"),
+          verbatimTextOutput("regressaoTxt"),
           tableOutput("pixel_coords"),
           downloadButton("download_data", "Download das Coordenadas"),
-          verbatimTextOutput("regressaoTxt"),
+          
           plotOutput("scatter_plot")
         )
       ),
@@ -303,15 +306,32 @@ server <- function(session, input, output) {
   
   output$regressaoTxt <- renderText({
     last_coord <- tail(coords(), 1)
-    if (nrow(last_coord) == 0) return("-") else {
+    if (nrow(last_coord) == 0)
+      return("-")
+    else {
       dados <- coords() # Obtenha os dados do dataframe
       modelo <- lm(y ~ x, data = dados)
       eq <- paste("Equação: y =",
-                  round(coef(modelo)[1], 5), "+",
-                  round(coef(modelo)[2], 5), "*x")
+                  round(coef(modelo)[1], 5), " + (",
+                  round(coef(modelo)[2], 5), ")x")
       r2 <- paste("R² =", round(summary(modelo)$r.squared, 5))
       aic <- paste("AIC =", round(AIC(modelo), 5))
-      paste(eq, r2, aic, sep = "\n")
+      
+      grupos <- split(dados, dados$ponto)
+      
+      resultados_mvn <- lapply(grupos, function(grupo) {
+        mvn_result <- try(mvn(data = grupo[, c("x", "y")], 
+                              mvnTest = "hz"),
+                          silent = TRUE)
+        if (inherits(mvn_result, 'try-error')) {return("-")}
+        else {return(paste(mvn_result$multivariateNormality$MVN))}
+      })
+      
+      paste(eq, 
+            r2, 
+            aic, 
+            paste("Teste de Henze-Zirkler: ", paste0(resultados_mvn, collapse = "")), 
+            sep = "\n")
     }
   })
   
