@@ -321,7 +321,7 @@ server <- function(session, input, output) {
       
       resultados_mvn <- lapply(grupos, function(grupo) {
         mvn_result <- try(mvn(data = grupo[, c("x", "y")], 
-                              mvnTest = "hz"),
+                              mvnTest = "dh"),
                           silent = TRUE)
         if (inherits(mvn_result, 'try-error')) {return("-")}
         else {return(paste(mvn_result$multivariateNormality$MVN))}
@@ -330,7 +330,7 @@ server <- function(session, input, output) {
       paste(eq, 
             r2, 
             aic, 
-            paste("Teste de Henze-Zirkler: ", paste0(resultados_mvn, collapse = "")), 
+            paste("Teste de Doornik-Hansen (por grupo): ", paste0(resultados_mvn, collapse = "")), 
             sep = "\n")
     }
   })
