@@ -64,10 +64,11 @@ ui <- dashboardPage(
           uiOutput("imgOutput"),
           verbatimTextOutput("coordsTxt"),
           verbatimTextOutput("regressaoTxt"),
+          plotOutput("scatter_plot"),
           tableOutput("pixel_coords"),
-          downloadButton("download_data", "Download das Coordenadas"),
+          downloadButton("download_data", "Download das Coordenadas")
           
-          plotOutput("scatter_plot")
+          
         )
       ),
       tabItem(
@@ -271,6 +272,7 @@ server <- function(session, input, output) {
     
   })
   
+  
   output$scatter_plot <- renderPlot({
     dados <<- coords()
     if (nrow(dados) == 0) return(NULL)
@@ -284,8 +286,9 @@ server <- function(session, input, output) {
     xmax <- dimensoes_aux[2]
     ymin <- 0
     ymax <- dimensoes_aux[1]
-      
-     
+    
+    aspect_ratio <- dimensoes_aux[1] / dimensoes_aux[2]
+    
     # Plotar o gráfico com os valores de Y transformados
     ggplot(dados, aes(x = x, y = y_mod)) +
       annotation_custom(imagem_grob, xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax) +
@@ -300,10 +303,20 @@ server <- function(session, input, output) {
       coord_cartesian(xlim = c(xmin, xmax), ylim = c(ymin, ymax)) +
       theme(axis.text.x = element_blank(), axis.text.y = element_blank(),
             legend.title = element_text(size = 14),
-            legend.text = element_text(size = 14))
+            legend.text = element_text(size = 14)) +
+      theme(aspect.ratio = aspect_ratio)
     
-  }, height = 600)
+  })
+
   
+  
+  
+  
+  
+  
+  
+  
+    
   output$regressaoTxt <- renderText({
     last_coord <- tail(coords(), 1)
     if (nrow(last_coord) == 0)
