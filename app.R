@@ -47,6 +47,9 @@ ui <- dashboardPage(
                 accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv")),
       numericInput("inicio_quadro", "Marcação temporal do quadro inicial (s):", value = 1.266, min = 0),
       numericInput("fim_quadro", "Marcação temporal do quadro final (s):", value = 1.866, min = 0),
+      numericInput("erro_medio_mt", "Erro médio da marcação temporal (ms/s):", value = 0.881, min = 0.01, max = 5),
+      numericInput("dp_erro_medio_mt", "DP do erro médio da marcação temporal (ms/s):", value = 0.287, min = 0.01, max = 5),
+      
       numericInput("dist_referencia", "Distância de referência (mm):", value = 2002, min = 0.01),
       tags$hr(),
       numericInput("rep_mc", "Número de repetições pelo MMC:", value = 100, min = 1, max = 10000),
@@ -310,12 +313,6 @@ server <- function(session, input, output) {
 
   
   
-  
-  
-  
-  
-  
-  
     
   output$regressaoTxt <- renderText({
     last_coord <- tail(coords(), 1)
@@ -553,7 +550,10 @@ server <- function(session, input, output) {
       # Remove valores NA e calcula a velocidade
       dt <-  input$fim_quadro - input$inicio_quadro # Tempo entre os frames (s)
       dt <-  dt/3600 # h
-      velocidade <- na.omit(resultados$distancia)/dt
+      # velocidade <- na.omit(resultados$distancia)/dt
+      velocidade <- na.omit(resultados$distancia)/(dt+
+                            rnorm(1, mean = dt*input$erro_medio_mt, 
+                                     sd = abs(dt)*input$dp_erro_medio_mt)/1000)
       
       # Media
       media <- mean(velocidade)
@@ -629,7 +629,8 @@ server <- function(session, input, output) {
                  colour = "red", 
                  linetype = "dashed", 
                  size = 0.5) +
-      labs(title = "Ogiva de Galton do deslocamento",
+      labs(
+           # title = "Ogiva de Galton do deslocamento",
            x = "Deslocamento (m)",
            y = "Frequência Acumulada") +
       theme_minimal()
