@@ -1,3 +1,7 @@
+# Aplicativo para estimativa de velocidade veicular
+# Autor carlo Ralph De Musis
+# Versão: 0.83
+
 library(base64enc)
 library(jpeg)
 library(shiny)
@@ -10,12 +14,11 @@ library(deming)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
-
 library(grid)
 
 # Defina a UI
 ui <- dashboardPage(
-  dashboardHeader(title = "ERASMUS+SuCCESS"),
+  dashboardHeader(title = "POLITEC/MT"),
   dashboardSidebar(
     # Barra lateral com abas recolhíveis e dispositivos de entrada
     sidebarMenu(
@@ -41,7 +44,7 @@ ui <- dashboardPage(
       condition = "input.tabs === 'app2'",
       sliderInput("dp", "Filtro gaussiano isotrópico, desvio padrão:", min = 0, max = 100, value = 0, step = 1),
       tags$hr(),
-      fileInput("arq", "Arquivo com coordenadas dos pontos:",
+      fileInput("arq", "Arquivo com coordenadas dos pontos (apenas se não os gerou na outra aba):",
                 buttonLabel = "Selecione...",
                 placeholder = "Nenhum arquivo selecionado",
                 accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv")),
@@ -305,9 +308,6 @@ server <- function(session, input, output) {
     
   })
 
-  
-  
-    
   output$regressaoTxt <- renderText({
     last_coord <- tail(coords(), 1)
     if (nrow(last_coord) == 0)
