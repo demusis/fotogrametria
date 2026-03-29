@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller
+/build/
+/dist/
+*.spec
+
+# Installer output
+/instalador/
+*.exe
+*.zip
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+c1-240420155938.jpg
