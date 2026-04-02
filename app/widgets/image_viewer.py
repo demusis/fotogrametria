@@ -105,7 +105,6 @@ class ImageViewer(QGraphicsView):
         # Habilitar rastreamento do mouse (sem precisar segurar botão)
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
-
         # Iniciar em modo marcação
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.setCursor(self._cursor_cruz)

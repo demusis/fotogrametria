@@ -41,6 +41,7 @@ from .core.processing import (
     processar, regressao_deming, teste_mardia, ResultadoProcessamento, MardiaResult,
 )
 from .utils.export import exportar_zip
+from .utils.pdf_report import gerar_pdf_academico
 from .core.filters import histogram_percentile, clahe, retinex_msr, wiener_deblur, white_balance
 
 import cv2
@@ -48,6 +49,8 @@ import cv2
 
 # ===========================================================================
 # Worker threads
+# ===========================================================================
+# Worker thread para processamento
 # ===========================================================================
 
 class ProcessingWorker(QThread):
@@ -88,8 +91,6 @@ class FilterWorker(QThread):
             self.finished.emit(result)
         except Exception as e:
             self.error.emit(str(e))
-
-
 # ===========================================================================
 # Diálogo popup de regressão sobre imagem
 # ===========================================================================
@@ -514,7 +515,6 @@ class MainWindow(QMainWindow):
         self.video_tab = VideoPlayerTab()
         self.video_tab.enviar_par_imagens.connect(self._on_video_pair_sent)
         self.tabs.addTab(self.video_tab, "🎞️  Vídeo")
-
         content_layout.addWidget(self.tabs)
         main_layout.addWidget(content_widget, stretch=1)
 
@@ -630,6 +630,7 @@ class MainWindow(QMainWindow):
         self.sidebar.apagar_tudo.connect(self._apagar_tudo)
         self.sidebar.calcular.connect(self._calcular)
         self.sidebar.exportar.connect(self._exportar)
+        self.sidebar.gerar_relatorio.connect(self._gerar_relatorio_pdf)
         self.sidebar.zoom_alterado.connect(self._zoom_alterado)
         self.sidebar.tema_alterado.connect(self._apply_theme)
         self.sidebar.ver_regressao.connect(self._mostrar_regressao_popup)
@@ -953,7 +954,6 @@ class MainWindow(QMainWindow):
         self.sidebar.spin_fim.setValue(q_fim)
         
         self.tabs.setCurrentWidget(self.combiner_tab)
-
     def _abrir_imagem_dialog(self):
         caminho, _ = QFileDialog.getOpenFileName(
             self, "Selecionar Imagem", "",
@@ -972,7 +972,6 @@ class MainWindow(QMainWindow):
             self._atualizar_info()
             h, w = self._img_array.shape[:2]
             self.statusBar().showMessage(f"Imagem carregada: {w} × {h}")
-            
             import hashlib
             sha = hashlib.sha256()
             with open(caminho, "rb") as fh:
@@ -1398,3 +1397,46 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Exportado: {caminho}")
         except Exception as e:
             QMessageBox.critical(self, "Erro na Exportacao", f"Falha ao exportar:\n{e}")
+
+    def _gerar_relatorio_pdf(self):
+        if self._resultado is None:
+            QMessageBox.information(self, "Relatorio", "Nenhum resultado para gerar relatorio. Execute o calculo primeiro.")
+            return
+
+        caminho, _ = QFileDialog.getSaveFileName(
+            self, "Salvar Relatorio PDF", "Relatorio_Pericial.pdf",
+            "PDF (*.pdf)"
+        )
+        if not caminho:
+            return
+
+        try:
+            self.statusBar().showMessage("Gerando relatorio PDF...")
+            self._log_audit(f"Geracao de relatorio PDF iniciada: {Path(caminho).name}")
+            
+            figuras = self.results_panel.get_figuras()
+            
+            dados_pontos = [
+                {"ponto": LETRAS[p["ponto"] - 1], "x": p["x"], "y": p["y"], "cinza": p["cinza"]}
+                for p in self._pontos
+            ]
+            
+            parametros = self.sidebar.get_parametros()
+            fig_regressao = self._gerar_figura_regressao()
+            resultados_mardia = self._obter_resultados_mardia()
+            
+            gerar_pdf_academico(
+                caminho_saida=caminho,
+                dados_pontos=dados_pontos if dados_pontos else None,
+                parametros=parametros,
+                resultado=self._resultado,
+                figuras=figuras,
+                fig_regressao=fig_regressao,
+                resultados_mardia=resultados_mardia,
+                audit_log=self._audit_log if self._audit_log else None
+            )
+            
+            QMessageBox.information(self, "Relatorio", f"Relatorio gerado com sucesso!\n{caminho}")
+            self.statusBar().showMessage(f"Relatorio PDF gerado: {caminho}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro no Relatorio", f"Falha ao gerar o relatorio:\n{e}")

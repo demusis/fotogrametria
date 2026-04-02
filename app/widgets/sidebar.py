@@ -70,6 +70,7 @@ class Sidebar(QWidget):
     zoom_alterado = Signal(float)
     tema_alterado = Signal(str)  # "dark" ou "light"
     ver_regressao = Signal()  # Solicita popup de regressão sobre imagem
+    gerar_relatorio = Signal() # Solicita a geração do relatório em PDF
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -256,6 +257,11 @@ class Sidebar(QWidget):
         btn_calc.clicked.connect(self.calcular.emit)
         layout.addWidget(btn_calc)
 
+        btn_relatorio = QPushButton("📄  Gerar Relatório (PDF)")
+        btn_relatorio.setObjectName("btn_relatorio")
+        btn_relatorio.clicked.connect(self.gerar_relatorio.emit)
+        layout.addWidget(btn_relatorio)
+
         btn_exp = QPushButton("📦  Exportar Gráficos e Dados (.zip)")
         btn_exp.setObjectName("btn_exportar")
         btn_exp.clicked.connect(self.exportar.emit)
@@ -345,6 +351,12 @@ class Sidebar(QWidget):
                 }
                 QPushButton#btn_exportar:hover {
                     background-color: #ff9955;
+                }
+                QPushButton#btn_relatorio {
+                    background-color: #C1232B;
+                }
+                QPushButton#btn_relatorio:hover {
+                    background-color: #E3424A;
                 }
                 QDoubleSpinBox, QSpinBox {
                     background-color: #0a1628;
@@ -445,6 +457,13 @@ class Sidebar(QWidget):
                 }
                 QPushButton#btn_exportar:hover {
                     background-color: #ff9955;
+                }
+                QPushButton#btn_relatorio {
+                    background-color: #C1232B;
+                    color: #ffffff;
+                }
+                QPushButton#btn_relatorio:hover {
+                    background-color: #E3424A;
                 }
                 QDoubleSpinBox, QSpinBox {
                     background-color: #ffffff;

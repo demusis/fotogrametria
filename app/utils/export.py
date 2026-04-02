@@ -106,7 +106,6 @@ def exportar_zip(
             log_str += "=" * 40 + "\n\n"
             log_str += "\n".join(audit_log)
             zf.writestr(f"audit_{data_str}.log", log_str)
-
         # Imagem original
         if imagem_original is not None:
             from PIL import Image

@@ -42,6 +42,7 @@ def build_exe():
         "PySide6.QtWidgets",
         "PySide6.QtGui",
         "PySide6.QtCore",
+        "PySide6.QtPrintSupport",
         "matplotlib.backends.backend_qtagg",
         "numpy",
         "scipy",
