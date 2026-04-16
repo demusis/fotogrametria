@@ -339,7 +339,8 @@ LIGHT_THEME = {
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Fotogrametria — Estimativa de Velocidade Veicular v1.5.0")
+        from app import __version__
+        self.setWindowTitle(f"Fotogrametria — Estimativa de Velocidade Veicular v{__version__}")
         self.setMinimumSize(1280, 720)
 
         # Estado
@@ -1044,10 +1045,11 @@ class MainWindow(QMainWindow):
 
     def _mostrar_sobre(self):
         """Abre diálogo Sobre."""
+        from app import __version__
         QMessageBox.about(
             self,
             "Sobre Fotogrametria",
-            "<h3>Fotogrametria v1.5.0</h3>"
+            f"<h3>Fotogrametria v{__version__}</h3>"
             "<p>Estimativa de velocidade veicular por fotogrametria.</p>"
             "<p>Autor original (R/Shiny): Carlo Ralph De Musis</p>"
             "<p>Portagem para Python com PySide6.</p>"

@@ -34,7 +34,8 @@ def main():
     # Configurações globais
     app.setApplicationName("Fotogrametria")
     app.setOrganizationName("POLITEC-MT")
-    app.setApplicationVersion("1.5.0")
+    from app import __version__
+    app.setApplicationVersion(__version__)
 
     # Fonte padrão
     font = QFont("Segoe UI", 10)
