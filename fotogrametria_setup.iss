@@ -1,13 +1,13 @@
-; Script Inno Setup para Fotogrametria
+; Script Inno Setup Gerado Automaticamente
 [Setup]
 AppName=Fotogrametria
 AppVersion=1.5.0
 AppPublisher=POLITEC-MT
-SetupIconFile=G:\Meu Drive\POLITEC\fotogrametria\assets\icon.ico
 DefaultDirName={autopf}\Fotogrametria
 DefaultGroupName=Fotogrametria
 OutputDir=G:\Meu Drive\POLITEC\fotogrametria\instalador
 OutputBaseFilename=Fotogrametria_Setup_1.5.0
+SetupIconFile=G:\Meu Drive\POLITEC\fotogrametria\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
