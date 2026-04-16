@@ -15,7 +15,7 @@ Aplicativo desktop desenvolvido em Python (PySide6) para a estimativa da velocid
 ### 1. Usando o Instalador do Windows (Recomendado)
 
 Você pode encontrar o instalador em:
-`instalador/Fotogrametria_Setup_1.0.0.exe`
+`instalador/Fotogrametria_Setup_1.5.0.exe`
 
 Esse é um pacote que instala o programa no `C:\Arquivos de Programas` de forma completamente autônoma, dispensando qualquer necessidade de ter o Python ou bibliotecas instaladas no computador.
 

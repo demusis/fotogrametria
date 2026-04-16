@@ -3,7 +3,7 @@ Entry-point do aplicativo Fotogrametria.
 Estimativa de velocidade veicular por fotogrametria.
 
 Autor original (R/Shiny): Carlo Ralph De Musis
-Portagem para Python: Versão 1.0
+Portagem para Python: Versão 1.5.0
 """
 
 import sys
@@ -34,7 +34,7 @@ def main():
     # Configurações globais
     app.setApplicationName("Fotogrametria")
     app.setOrganizationName("POLITEC-MT")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("1.5.0")
 
     # Fonte padrão
     font = QFont("Segoe UI", 10)

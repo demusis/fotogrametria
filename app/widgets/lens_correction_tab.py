@@ -414,9 +414,19 @@ class LensCorrectionTab(QWidget):
             return
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Imagem", "imagem_corrigida.png", "PNG (*.png)")
         if path:
-            img_uint8 = (self.undistorted_img * 255).astype(np.uint8)
-            cv2.imwrite(path, cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR))
-            QMessageBox.information(self, "Sucesso", "Imagem salva!")
+            try:
+                img_uint8 = (self.undistorted_img * 255).astype(np.uint8)
+                # Converte para BGR para o padrão de visualizadores de imagem
+                img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+                success, encoded_image = cv2.imencode(".png", img_bgr)
+                if success:
+                    with open(path, "wb") as f:
+                        f.write(encoded_image)
+                    QMessageBox.information(self, "Sucesso", "Imagem salva com sucesso!")
+                else:
+                    QMessageBox.critical(self, "Erro", "Erro ao codificar a imagem para PNG.")
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Falha ao salvar a imagem:\n{e}")
 
     def _send_image(self):
         if self.undistorted_img is not None:
