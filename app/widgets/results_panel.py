@@ -64,7 +64,7 @@ THEMES = {
 def _estilizar_eixo(ax, theme: dict):
     """Aplica estilo a um eixo matplotlib."""
     ax.set_facecolor(theme["face"])
-    ax.tick_params(colors=theme["text"], labelsize=9)
+    ax.tick_params(colors=theme["text"], labelsize=11)
     ax.xaxis.label.set_color(theme["text"])
     ax.yaxis.label.set_color(theme["text"])
     ax.title.set_color(theme["text"])
@@ -96,9 +96,9 @@ class ChartWidget(QWidget):
             self._lbl_desc.setWordWrap(True)
             layout.addWidget(self._lbl_desc)
 
-        self.figure = Figure(figsize=(10, 5), facecolor=t["bg"])
+        self.figure = Figure(figsize=(12, 6), facecolor=t["bg"])
         self.canvas = FigureCanvas(self.figure)
-        self.canvas.setMinimumHeight(350)
+        self.canvas.setMinimumHeight(400)
         layout.addWidget(self.canvas)
 
     def apply_theme(self, t: dict):
@@ -245,18 +245,24 @@ class ResultsPanel(QWidget):
         _estilizar_eixo(ax, t)
 
         if len(r.cinza_rot_x) > 0:
-            ax.scatter(r.cinza_rot_x, r.cinza_valores, s=1, c=t["scatter"], alpha=0.4, label="Pixels")
+            # Plotar pontos brutos primeiro (no fundo) bem discretos
+            ax.scatter(r.cinza_rot_x, r.cinza_valores, s=5, color="gray", alpha=0.25, edgecolors='none', label="Pixels", zorder=1)
+            
             if len(r.cinza_spline_x) > 0:
-                ax.plot(r.cinza_spline_x, r.cinza_spline_y, color=PALETA[1], linewidth=1.5, label="Spline")
+                ax.plot(r.cinza_spline_x, r.cinza_spline_y, color=PALETA[1], linewidth=1.5, label="Spline", zorder=3)
 
             for i, cx in enumerate(r.centros_cinza_x):
                 letra = LETRAS[i] if i < 4 else str(i + 1)
-                ax.axvline(cx, linestyle="--", color=PALETA[0], alpha=0.8, linewidth=1)
-                ax.text(cx, ax.get_ylim()[0], f" {letra}", fontsize=11, color=PALETA[0],
-                        ha="left", va="bottom", fontweight="bold")
+                cor_letra = PALETA[i % len(PALETA)]
+                ax.axvline(cx, color=cor_letra, linestyle="--", alpha=0.5, zorder=2)
+                ax.text(cx + 5, ax.get_ylim()[0], letra, color=cor_letra, fontsize=9, fontweight="bold", va="bottom", zorder=4)
+                # Plotar o marcador exato na curva
+                if len(r.cinza_spline_x) > 0:
+                    y_val = np.interp(cx, r.cinza_spline_x, r.cinza_spline_y)
+                    ax.plot(cx, y_val, marker='o', markersize=8, color=cor_letra, markeredgecolor='white', zorder=5)
 
-        ax.set_xlabel("Abscissas rotacionadas", fontsize=10)
-        ax.set_ylabel("Tom de Cinza", fontsize=10)
+        ax.set_xlabel("Abscissas rotacionadas", fontsize=12)
+        ax.set_ylabel("Tom de Cinza", fontsize=12)
         fig.tight_layout()
 
     def _plot_dispersao(self, r: ResultadoProcessamento):
@@ -288,11 +294,11 @@ class ResultsPanel(QWidget):
                 letra = LETRAS[i] if i < 4 else str(i + 1)
                 ax.plot(r.centros_x[i], r.centros_y[i], marker="x", color=PALETA[2],
                         markersize=8, markeredgewidth=2)
-                ax.text(r.centros_x[i], r.centros_y[i], f"  {letra}", fontsize=11,
+                ax.text(r.centros_x[i], r.centros_y[i], f"  {letra}", fontsize=12,
                         color=PALETA[0], fontweight="bold", va="center")
 
-        ax.set_xlabel("Abscissas rotacionadas", fontsize=10)
-        ax.set_ylabel("Ordenadas rotacionadas", fontsize=10)
+        ax.set_xlabel("Abscissas rotacionadas", fontsize=12)
+        ax.set_ylabel("Ordenadas rotacionadas", fontsize=12)
         fig.tight_layout()
 
     def _plot_velocidade(self, r: ResultadoProcessamento, nc: float):
@@ -319,11 +325,11 @@ class ResultsPanel(QWidget):
         ax1.axvline(p_sup, color=PALETA[0], linestyle="--", linewidth=1.2)
 
         y_max = ax1.get_ylim()[1]
-        ax1.text(media, y_max * 0.95, f"  {media:.1f}", color=PALETA[5], fontsize=10, va="top")
-        ax1.text(p_inf, y_max * 0.95, f"  {p_inf:.1f}", color=PALETA[0], fontsize=10, va="top")
-        ax1.text(p_sup, y_max * 0.95, f"  {p_sup:.1f}", color=PALETA[0], fontsize=10, va="top")
+        ax1.text(media, y_max * 0.95, f"  {media:.1f}", color=PALETA[5], fontsize=12, va="top")
+        ax1.text(p_inf, y_max * 0.95, f"  {p_inf:.1f}", color=PALETA[0], fontsize=12, va="top")
+        ax1.text(p_sup, y_max * 0.95, f"  {p_sup:.1f}", color=PALETA[0], fontsize=12, va="top")
 
-        ax1.set_ylabel("Frequência", fontsize=10)
+        ax1.set_ylabel("Frequência", fontsize=12)
         ax1.tick_params(labelbottom=False)
 
         bp = ax2.boxplot(r.velocidades, vert=False, widths=0.6,
@@ -333,7 +339,7 @@ class ResultsPanel(QWidget):
                          whiskerprops=dict(color=t["text"]),
                          capprops=dict(color=t["text"]),
                          flierprops=dict(markeredgecolor=t["text"], markersize=3))
-        ax2.set_xlabel("Velocidade (km/h)", fontsize=10)
+        ax2.set_xlabel("Velocidade (km/h)", fontsize=12)
         ax2.set_yticks([])
 
         fig.tight_layout()
@@ -370,14 +376,14 @@ class ResultsPanel(QWidget):
 
             x_range = sorted_d[-1] - sorted_d[0]
             ax.text(sorted_d[0] + x_range * 0.02, perc_media + 0.02,
-                    f"{media:.2f} m", color=PALETA[5], fontsize=10)
+                    f"{media:.2f} m", color=PALETA[5], fontsize=12)
             ax.text(p_inf, alpha - 0.04,
-                    f"{p_inf:.2f}", color=PALETA[0], fontsize=10, ha="center")
+                    f"{p_inf:.2f}", color=PALETA[0], fontsize=12, ha="center")
             ax.text(p_sup, 1 - alpha + 0.02,
-                    f"{p_sup:.2f}", color=PALETA[0], fontsize=10, ha="center")
+                    f"{p_sup:.2f}", color=PALETA[0], fontsize=12, ha="center")
 
-        ax.set_xlabel("Deslocamento (m)", fontsize=10)
-        ax.set_ylabel("Frequência Acumulada", fontsize=10)
+        ax.set_xlabel("Deslocamento (m)", fontsize=12)
+        ax.set_ylabel("Frequência Acumulada", fontsize=12)
         fig.tight_layout()
 
     def get_figuras(self) -> list[tuple[str, Figure]]:

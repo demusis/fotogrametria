@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QLabel, QMessageBox, QProgressDialog, QFileDialog, QStatusBar,
     QTableWidget, QTableWidgetItem, QHeaderView, QSplitter,
     QTextEdit, QTextBrowser, QDialog, QDialogButtonBox, QScrollArea,
-    QSpinBox, QDoubleSpinBox, QPushButton, QInputDialog,
+    QSpinBox, QDoubleSpinBox, QPushButton, QInputDialog, QFormLayout,
 )
 from PySide6.QtGui import QFont, QColor, QAction, QShortcut, QKeySequence
 from PySide6.QtCore import Qt, QThread, Signal
@@ -117,7 +117,7 @@ def criar_figura_regressao(
     ax.set_facecolor(fig_bg)
 
     # Exibir imagem
-    ax.imshow(img_array, origin="upper", extent=[0, w, h, 0], aspect="auto")
+    ax.imshow(img_array, origin="upper", extent=[0, w, h, 0])
 
     # Pontos marcados — agrupados por grupo A/B/C/D
     letras = ["A", "B", "C", "D"]
@@ -156,7 +156,7 @@ def criar_figura_regressao(
     for spine in ax.spines.values():
         spine.set_visible(False)
 
-    fig.tight_layout()
+    fig.tight_layout(pad=1.5)
     return fig
 
 
@@ -356,9 +356,15 @@ class MainWindow(QMainWindow):
         self._max_undo = 5
         self._audit_log: list[str] = []
         self._filter_worker: FilterWorker | None = None
+        self._video_path_used: str | None = None
+        self._regression_metrics: dict | None = None
+        self.filter_chain: list[dict] = []
 
         self._init_ui()
         self._connect_signals()
+        
+        if hasattr(self.video_tab, 'set_filter_callback'):
+            self.video_tab.set_filter_callback(self._apply_filter_chain)
         self._apply_theme("dark")
 
     # -------------------------------------------------------------------
@@ -413,6 +419,14 @@ class MainWindow(QMainWindow):
         act_resize = QAction("Reescalonamento (Lanczos)", self)
         act_resize.triggered.connect(self._open_resize_dialog)
         menu_filtros.addAction(act_resize)
+        
+        act_aspect = QAction("Correção de Razão de Aspecto", self)
+        act_aspect.triggered.connect(self._open_aspect_ratio_dialog)
+        menu_filtros.addAction(act_aspect)
+        
+        act_manager = QAction("Gerenciador de Filtros (Vídeo)", self)
+        act_manager.triggered.connect(self._open_filter_manager)
+        menu_filtros.addAction(act_manager)
         
         act_undo = QAction("Desfazer Filtro", self)
         act_undo.setShortcut("Ctrl+Z")
@@ -703,6 +717,33 @@ class MainWindow(QMainWindow):
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._audit_log.append(f"[{ts}] {msg}")
 
+    def _apply_filter_chain(self, frame: np.ndarray) -> np.ndarray:
+        if not self.filter_chain:
+            return frame
+            
+        import cv2
+        
+        res = frame.copy()
+        for f in self.filter_chain:
+            if not f.get("enabled", True):
+                continue
+            name = f["name"]
+            kwargs = f["kwargs"]
+            
+            if name == "resize" or name == "aspect_ratio":
+                new_w = kwargs.get("width")
+                new_h = kwargs.get("height")
+                if new_w and new_h:
+                    res = cv2.resize(res, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+            else:
+                func = self._FILTERS.get(name)
+                if func:
+                    try:
+                        res = func(res, **kwargs)
+                    except Exception:
+                        pass
+        return res
+
     def _apply_filter(self, filter_name: str):
         """Aplica filtro forense à imagem ativa em thread separada."""
         ctx, img = self._get_active_context()
@@ -728,6 +769,54 @@ class MainWindow(QMainWindow):
             if not ok:
                 return
             kwargs["percentile"] = val
+
+        elif filter_name == "retinex":
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Retinex Multi-Escala (Ajuste Fino)")
+            layout = QFormLayout(dlg)
+
+            sigma1_spin = QDoubleSpinBox()
+            sigma1_spin.setRange(1.0, 100.0)
+            sigma1_spin.setValue(15.0)
+            layout.addRow("Sigma 1 (fino):", sigma1_spin)
+
+            sigma2_spin = QDoubleSpinBox()
+            sigma2_spin.setRange(10.0, 200.0)
+            sigma2_spin.setValue(80.0)
+            layout.addRow("Sigma 2 (médio):", sigma2_spin)
+
+            sigma3_spin = QDoubleSpinBox()
+            sigma3_spin.setRange(50.0, 500.0)
+            sigma3_spin.setValue(250.0)
+            layout.addRow("Sigma 3 (grosso):", sigma3_spin)
+
+            # Novos parâmetros de ajuste fino
+            blend_spin = QDoubleSpinBox()
+            blend_spin.setRange(0.0, 1.0)
+            blend_spin.setSingleStep(0.1)
+            blend_spin.setValue(0.5)
+            blend_spin.setToolTip("Mistura entre luz natural (0.0) e Retinex puro (1.0)")
+            layout.addRow("Intensidade do Filtro:", blend_spin)
+
+            black_clip_spin = QDoubleSpinBox()
+            black_clip_spin.setRange(0.0, 5.0)
+            black_clip_spin.setSingleStep(0.1)
+            black_clip_spin.setValue(1.0)
+            black_clip_spin.setSuffix(" %")
+            black_clip_spin.setToolTip("Corta os tons mais escuros para forçar um preto absoluto. Valores maiores aumentam o contraste nas sombras.")
+            layout.addRow("Corte de Pretos:", black_clip_spin)
+
+            btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            btn_box.accepted.connect(dlg.accept)
+            btn_box.rejected.connect(dlg.reject)
+            layout.addRow(btn_box)
+
+            if dlg.exec() != QDialog.Accepted:
+                return
+            
+            kwargs["sigmas"] = [sigma1_spin.value(), sigma2_spin.value(), sigma3_spin.value()]
+            kwargs["blend_factor"] = blend_spin.value()
+            kwargs["black_clip"] = black_clip_spin.value()
 
         elif filter_name == "wiener":
             # Diálogo interativo para parâmetros de desfoque
@@ -782,12 +871,28 @@ class MainWindow(QMainWindow):
         if filter_fn is None:
             return
 
-        self._push_undo(ctx, img)
-
-        # Executar filtro em thread separada com diálogo de progresso
         label = "Coordenadas" if ctx == "coords" else "Vídeo"
         filter_readable = self._FILTER_NAMES.get(filter_name, filter_name)
 
+        if ctx == "video":
+            import uuid
+            self.filter_chain.append({
+                "id": str(uuid.uuid4()),
+                "name": filter_name,
+                "readable": filter_readable,
+                "kwargs": kwargs,
+                "enabled": True
+            })
+            params_str = ", ".join(f"{k}={v}" for k, v in kwargs.items()) if kwargs else "padrão"
+            self._log_audit(f"Filtro '{filter_readable}' adicionado à pipeline de Vídeo. Params: {params_str}")
+            self.statusBar().showMessage(f"Filtro '{filter_readable}' ativado no Vídeo.")
+            if hasattr(self.video_tab, 'refresh_frame'):
+                self.video_tab.refresh_frame()
+            return
+
+        self._push_undo(ctx, img)
+
+        # Executar filtro em thread separada com diálogo de progresso
         progress = QProgressDialog(f"Aplicando {filter_readable}...", None, 0, 0, self)
         progress.setWindowTitle("Filtro Forense")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
@@ -820,6 +925,17 @@ class MainWindow(QMainWindow):
         if ctx == "other":
             return
 
+        if ctx == "video":
+            if not self.filter_chain:
+                self.statusBar().showMessage("Nenhum filtro na pipeline de vídeo.")
+                return
+            popped = self.filter_chain.pop()
+            self._log_audit(f"Filtro '{popped['readable']}' removido da pipeline de Vídeo (Desfazer).")
+            self.statusBar().showMessage(f"Desfez último filtro ({popped['readable']}).")
+            if hasattr(self.video_tab, 'refresh_frame'):
+                self.video_tab.refresh_frame()
+            return
+
         img = self._pop_undo(ctx)
         if img is None:
             self.statusBar().showMessage("Nada para desfazer.")
@@ -827,6 +943,7 @@ class MainWindow(QMainWindow):
 
         self._set_active_image(ctx, img)
         label = "Coordenadas" if ctx == "coords" else "Vídeo"
+        self._log_audit(f"Filtro/Reescalonamento desfeito (Aba {label}). Imagem restaurada para o estado anterior.")
         self.statusBar().showMessage(f"Desfez último filtro/reescalonamento ({label}).")
 
     def _open_resize_dialog(self):
@@ -918,11 +1035,192 @@ class MainWindow(QMainWindow):
             new_h = spin_h.value()
             if new_w == w and new_h == h: return
             
+            if ctx == "video":
+                import uuid
+                self.filter_chain.append({
+                    "id": str(uuid.uuid4()),
+                    "name": "resize",
+                    "readable": f"Reescalonamento ({new_w}x{new_h})",
+                    "kwargs": {"width": new_w, "height": new_h},
+                    "enabled": True
+                })
+                self._log_audit(f"Reescalonamento adicionado à pipeline de Vídeo: {w}x{h} → {new_w}x{new_h}.")
+                self.statusBar().showMessage(f"Reescalonamento ({new_w}x{new_h}) ativado.")
+                if hasattr(self.video_tab, 'refresh_frame'):
+                    self.video_tab.refresh_frame()
+            else:
+                self._push_undo(ctx, img)
+                resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+                self._set_active_image(ctx, resized)
+                self._log_audit(f"Reescalonamento {w}x{h} → {new_w}x{new_h} (Lanczos4).")
+                self.statusBar().showMessage(f"Reescalonado para {new_w}x{new_h} (Lanczos).")
+
+    def _open_aspect_ratio_dialog(self):
+        """Abre diálogo para correção da razão de aspecto mantendo a altura."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QDoubleSpinBox, QWidget, QPushButton, QMessageBox
+        
+        ctx, img = self._get_active_context()
+        if ctx == "other":
+            QMessageBox.information(self, "Aviso", "Correção de Razão de Aspecto no 'Vídeo' ou 'Coordenadas' apenas.")
+            return
+        if img is None:
+            return
+
+        h, w = img.shape[:2]
+        
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Correção de Razão de Aspecto")
+        layout = QVBoxLayout(dlg)
+        
+        layout.addWidget(QLabel(f"Dimensões atuais: {w}x{h} (Razão: {w/h:.3f})"))
+        
+        form = QHBoxLayout()
+        form.addWidget(QLabel("Nova Razão:"))
+        
+        combo = QComboBox()
+        combo.addItems(["Original (DAR do Vídeo)", "4:3 (1.333)", "16:9 (1.778)", "1:1 (1.0)", "Personalizado"])
+        form.addWidget(combo)
+        layout.addLayout(form)
+        
+        custom_lay = QHBoxLayout()
+        spin_w_ratio = QDoubleSpinBox()
+        spin_w_ratio.setRange(0.1, 100.0)
+        spin_w_ratio.setValue(16.0)
+        spin_w_ratio.setDecimals(3)
+        
+        spin_h_ratio = QDoubleSpinBox()
+        spin_h_ratio.setRange(0.1, 100.0)
+        spin_h_ratio.setValue(9.0)
+        spin_h_ratio.setDecimals(3)
+        
+        custom_lay.addWidget(spin_w_ratio)
+        custom_lay.addWidget(QLabel(":"))
+        custom_lay.addWidget(spin_h_ratio)
+        
+        custom_wgt = QWidget()
+        custom_wgt.setLayout(custom_lay)
+        custom_wgt.setVisible(False)
+        layout.addWidget(custom_wgt)
+        
+        combo.currentIndexChanged.connect(lambda idx: custom_wgt.setVisible(idx == 4))
+        
+        btns = QHBoxLayout()
+        btn_ok = QPushButton("Aplicar")
+        btn_cancel = QPushButton("Cancelar")
+        btn_ok.clicked.connect(dlg.accept)
+        btn_cancel.clicked.connect(dlg.reject)
+        btns.addWidget(btn_ok)
+        btns.addWidget(btn_cancel)
+        layout.addLayout(btns)
+        
+        if dlg.exec() != int(QDialog.DialogCode.Accepted):
+            return
+            
+        idx = combo.currentIndex()
+        if idx == 0:
+            target_ratio = w / h
+            if self._video_path_used:
+                try:
+                    import subprocess
+                    cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=display_aspect_ratio", "-of", "default=noprint_wrappers=1:nokey=1", self._video_path_used]
+                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                    dar_str = res.stdout.strip()
+                    if dar_str and ":" in dar_str and dar_str != "0:1":
+                        num, den = map(float, dar_str.split(":"))
+                        if den > 0:
+                            target_ratio = num / den
+                except Exception:
+                    pass
+        elif idx == 1:
+            target_ratio = 4.0 / 3.0
+        elif idx == 2:
+            target_ratio = 16.0 / 9.0
+        elif idx == 3:
+            target_ratio = 1.0
+        else:
+            if spin_h_ratio.value() > 0:
+                target_ratio = spin_w_ratio.value() / spin_h_ratio.value()
+            else:
+                target_ratio = w / h
+                
+        if abs(target_ratio - (w/h)) < 0.01:
+            return
+            
+        new_w = int(h * target_ratio)
+        new_h = h
+        
+        if ctx == "video":
+            import uuid
+            self.filter_chain.append({
+                "id": str(uuid.uuid4()),
+                "name": "aspect_ratio",
+                "readable": f"Correção Razão de Aspecto ({new_w}x{new_h})",
+                "kwargs": {"width": new_w, "height": new_h},
+                "enabled": True
+            })
+            self._log_audit(f"Correção de Aspect Ratio na pipeline de Vídeo: {new_w}x{new_h} (Razão {target_ratio:.3f}).")
+            self.statusBar().showMessage(f"Razão de aspecto corrigida para {target_ratio:.3f}.")
+            if hasattr(self.video_tab, 'refresh_frame'):
+                self.video_tab.refresh_frame()
+        else:
             self._push_undo(ctx, img)
             resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
             self._set_active_image(ctx, resized)
-            self._log_audit(f"Reescalonamento {w}x{h} → {new_w}x{new_h} (Lanczos4).")
-            self.statusBar().showMessage(f"Reescalonado para {new_w}x{new_h} (Lanczos).")
+            self._log_audit(f"Correção de Razão de Aspecto: {w}x{h} → {new_w}x{new_h} (Razão {target_ratio:.3f}).")
+            self.statusBar().showMessage(f"Razão de aspecto corrigida para {target_ratio:.3f} ({new_w}x{new_h}).")
+
+    def _open_filter_manager(self):
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton
+        from PySide6.QtCore import Qt
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Gerenciador de Filtros (Vídeo)")
+        dlg.resize(400, 300)
+        
+        layout = QVBoxLayout(dlg)
+        
+        list_wgt = QListWidget()
+        
+        def refresh_list():
+            list_wgt.clear()
+            for f in self.filter_chain:
+                item = QListWidgetItem(f["readable"])
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked if f.get("enabled", True) else Qt.CheckState.Unchecked)
+                item.setData(Qt.ItemDataRole.UserRole, f["id"])
+                list_wgt.addItem(item)
+                
+        refresh_list()
+        
+        list_wgt.itemChanged.connect(self._on_filter_item_changed)
+        layout.addWidget(list_wgt)
+        
+        btn_clear = QPushButton("Remover Todos")
+        btn_clear.clicked.connect(lambda: self._clear_all_filters(dlg))
+        layout.addWidget(btn_clear)
+        
+        dlg.exec()
+        
+    def _on_filter_item_changed(self, item):
+        from PySide6.QtCore import Qt
+        f_id = item.data(Qt.ItemDataRole.UserRole)
+        enabled = (item.checkState() == Qt.CheckState.Checked)
+        for f in self.filter_chain:
+            if f["id"] == f_id:
+                if f.get("enabled", True) != enabled:
+                    f["enabled"] = enabled
+                    self._log_audit(f"Filtro '{f['readable']}' {'habilitado' if enabled else 'desabilitado'} na pipeline de Vídeo.")
+                    if hasattr(self.video_tab, 'refresh_frame'):
+                        self.video_tab.refresh_frame()
+                break
+                
+    def _clear_all_filters(self, dlg):
+        if not self.filter_chain: return
+        self.filter_chain.clear()
+        self._log_audit("Todos os filtros da pipeline de Vídeo foram removidos.")
+        if hasattr(self.video_tab, 'refresh_frame'):
+            self.video_tab.refresh_frame()
+        dlg.accept()
 
     def _on_combiner_send(self, img_array: np.ndarray):
         """Recebe imagem mesclada e a envia para a aba de correção."""
@@ -953,6 +1251,9 @@ class MainWindow(QMainWindow):
         
         self.sidebar.spin_inicio.setValue(q_inicio)
         self.sidebar.spin_fim.setValue(q_fim)
+        
+        if getattr(self.video_tab, 'player', None):
+            self._video_path_used = self.video_tab.player.path
         
         self.tabs.setCurrentWidget(self.combiner_tab)
     def _abrir_imagem_dialog(self):
@@ -1110,6 +1411,12 @@ class MainWindow(QMainWindow):
         n = len(xs)
         aic = n * np.log(ss_res / n) + 4 if n > 0 and ss_res > 0 else float('inf')
 
+        self._regression_metrics = {
+            "equacao": f"y = {b0:.5f} + ({b1:.5f})x",
+            "r2": f"{r2:.5f}",
+            "aic": f"{aic:.5f}"
+        }
+
         linhas = [
             f"Equação: y = {b0:.5f} + ({b1:.5f})x",
             f"R² = {r2:.5f}",
@@ -1140,7 +1447,7 @@ class MainWindow(QMainWindow):
                 mr = teste_mardia(data)
                 linhas.append(
                     f"  {letra} - {mr.label} "
-                    f"(Skew = {mr.skewness_p:.3f}; Kurt = {mr.kurtosis_p:.3f})"
+                    f"(N={len(gx)}; Assim={mr.skewness_p:.3f}; Curt={mr.kurtosis_p:.3f}; S-W X={mr.shapiro_x_p:.3f}; S-W Y={mr.shapiro_y_p:.3f})"
                 )
             except Exception:
                 linhas.append(f"  {letra} - Erro no teste")
@@ -1223,6 +1530,9 @@ class MainWindow(QMainWindow):
             return
 
         self._log_audit(f"Iniciando cálculo de velocidade com {len(self._pontos)} pontos ou via CSV.")
+        self._log_audit("Iniciada Simulação de Monte Carlo acoplada à Regressão Ortogonal de Deming.")
+        self._log_audit("Metodologia Estatística: O intervalo de tempo entre quadros sofre perturbação estocástica (distribuição Normal iterada a partir do Erro Médio Temporal fornecido). Em cada iteração, as coordenadas projetadas são ajustadas para extração da velocidade instantânea baseada na inclinação da reta (Regressão de Deming). O conjunto empírico de velocidades extraídas delimita o intervalo de confiança reportado nos resultados.")
+        
         pontos_x, pontos_y = result
         params = self.sidebar.get_parametros()
 
@@ -1319,11 +1629,14 @@ class MainWindow(QMainWindow):
             if len(gx) < 3:
                 resultados.append({
                     "grupo": letra,
+                    "N": len(gx),
                     "resultado": "Dados insuficientes",
                     "skewness_stat": "",
                     "skewness_p": "",
                     "kurtosis_stat": "",
                     "kurtosis_p": "",
+                    "shapiro_x_p": "",
+                    "shapiro_y_p": "",
                 })
                 continue
 
@@ -1332,20 +1645,26 @@ class MainWindow(QMainWindow):
                 mr = teste_mardia(data)
                 resultados.append({
                     "grupo": letra,
+                    "N": len(gx),
                     "resultado": "Normal" if mr.is_normal else "Nao normal",
                     "skewness_stat": round(mr.skewness_stat, 6),
                     "skewness_p": round(mr.skewness_p, 6),
                     "kurtosis_stat": round(mr.kurtosis_stat, 6),
                     "kurtosis_p": round(mr.kurtosis_p, 6),
+                    "shapiro_x_p": round(mr.shapiro_x_p, 6),
+                    "shapiro_y_p": round(mr.shapiro_y_p, 6),
                 })
             except Exception:
                 resultados.append({
                     "grupo": letra,
+                    "N": len(gx),
                     "resultado": "Erro no teste",
                     "skewness_stat": "",
                     "skewness_p": "",
                     "kurtosis_stat": "",
                     "kurtosis_p": "",
+                    "shapiro_x_p": "",
+                    "shapiro_y_p": "",
                 })
 
         return resultados if resultados else None
@@ -1427,6 +1746,37 @@ class MainWindow(QMainWindow):
             fig_regressao = self._gerar_figura_regressao()
             resultados_mardia = self._obter_resultados_mardia()
             
+            video_info = None
+            if hasattr(self, '_video_path_used') and self._video_path_used:
+                import hashlib
+                import subprocess
+                sha512 = hashlib.sha512()
+                try:
+                    with open(self._video_path_used, "rb") as f:
+                        for chunk in iter(lambda: f.read(4096 * 1024), b""):
+                            sha512.update(chunk)
+                    hash_str = sha512.hexdigest()
+                    
+                    try:
+                        mi_res = subprocess.run(["mediainfo", self._video_path_used], capture_output=True, text=True, timeout=10)
+                        if mi_res.returncode == 0 and mi_res.stdout.strip():
+                            media_text = mi_res.stdout.strip()
+                        else:
+                            raise Exception()
+                    except:
+                        mi_res = subprocess.run([
+                            "ffprobe", "-v", "quiet", "-show_format", "-show_streams", self._video_path_used
+                        ], capture_output=True, text=True, timeout=10)
+                        media_text = mi_res.stdout.strip()
+                    
+                    video_info = {
+                        "filename": os.path.basename(self._video_path_used),
+                        "sha512": hash_str,
+                        "mediainfo": media_text
+                    }
+                except Exception as e:
+                    self._log_audit(f"Erro ao obter informacoes do video para relatorio: {e}")
+            
             gerar_pdf_academico(
                 caminho_saida=caminho,
                 dados_pontos=dados_pontos if dados_pontos else None,
@@ -1435,7 +1785,9 @@ class MainWindow(QMainWindow):
                 figuras=figuras,
                 fig_regressao=fig_regressao,
                 resultados_mardia=resultados_mardia,
-                audit_log=self._audit_log if self._audit_log else None
+                audit_log=self._audit_log if self._audit_log else None,
+                video_info=video_info,
+                regression_metrics=getattr(self, '_regression_metrics', None)
             )
             
             QMessageBox.information(self, "Relatorio", f"Relatorio gerado com sucesso!\n{caminho}")

@@ -50,23 +50,40 @@ def main():
         }
         QScrollBar:vertical {
             width: 10px;
-            border-radius: 5px;
+            background: transparent;
+            margin: 0px;
         }
         QScrollBar::handle:vertical {
+            background: rgba(128, 128, 128, 0.5);
             min-height: 30px;
             border-radius: 5px;
         }
+        QScrollBar::handle:vertical:hover {
+            background: rgba(128, 128, 128, 0.8);
+        }
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            background: transparent;
+        }
         QScrollBar:horizontal {
             height: 10px;
-            border-radius: 5px;
+            background: transparent;
+            margin: 0px;
         }
         QScrollBar::handle:horizontal {
+            background: rgba(128, 128, 128, 0.5);
             min-width: 30px;
             border-radius: 5px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: rgba(128, 128, 128, 0.8);
+        }
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+            background: transparent;
         }
         QScrollBar::add-line, QScrollBar::sub-line {
             height: 0px;
             width: 0px;
+            background: transparent;
         }
     """)
 

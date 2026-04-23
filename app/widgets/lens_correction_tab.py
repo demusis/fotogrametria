@@ -359,9 +359,10 @@ class LensCorrectionTab(QWidget):
             return
             
         img_display = self.undistorted_img.copy()
+        img_uint8 = (img_display * 255).astype(np.uint8)
+        overlay = img_uint8.copy()
+
         if self.k1 == 0 and self.k2 == 0 and self.k3 == 0:
-            img_uint8 = (img_display * 255).astype(np.uint8)
-            overlay = img_uint8.copy()
             # Desenha as linhas finalizadas
             for poly in self.polylines:
                 for i in range(len(poly)-1):
@@ -373,10 +374,11 @@ class LensCorrectionTab(QWidget):
                 cv2.line(overlay, self.current_poly[i], self.current_poly[i+1], (255, 0, 255), 2)
             for pt in self.current_poly:
                 cv2.circle(overlay, pt, 5, (255, 0, 255), -1)
-                
-            self.viewer.carregar_imagem(overlay.astype(np.float64)/255.0)
-        else:
-            self.viewer.carregar_imagem(self.undistorted_img)
+
+        # Textos são SEMPRE desenhados por cima de tudo (após correções/filtros)
+        self._draw_texts_on(overlay)
+
+        self.viewer.carregar_imagem(overlay.astype(np.float64)/255.0)
 
     def _optimize(self):
         if self.img_array is None:
@@ -415,7 +417,9 @@ class LensCorrectionTab(QWidget):
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Imagem", "imagem_corrigida.png", "PNG (*.png)")
         if path:
             try:
-                img_uint8 = (self.undistorted_img * 255).astype(np.uint8)
+                # Aplicar textos por cima da imagem final no momento de salvar
+                final_img = self._compose_final_image()
+                img_uint8 = (final_img * 255).astype(np.uint8)
                 # Converte para BGR para o padrão de visualizadores de imagem
                 img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
                 success, encoded_image = cv2.imencode(".png", img_bgr)
@@ -430,9 +434,18 @@ class LensCorrectionTab(QWidget):
 
     def _send_image(self):
         if self.undistorted_img is not None:
-            self.enviar_imagem.emit(self.undistorted_img)
+            # Aplicar textos por cima da imagem final no momento de enviar
+            final_img = self._compose_final_image()
+            self.enviar_imagem.emit(final_img)
         else:
             QMessageBox.warning(self, "Aviso", "Corrija ou carregue uma imagem primeiro antes de enviar.")
+
+    def _compose_final_image(self) -> np.ndarray:
+        """Compõe a imagem final: imagem corrigida + textos por cima."""
+        img = self.undistorted_img.copy()
+        img_uint8 = (img * 255).astype(np.uint8)
+        self._draw_texts_on(img_uint8)
+        return img_uint8.astype(np.float64) / 255.0
 
     def _create_text_group(self, title: str, is_left: bool) -> QGroupBox:
         grp = QGroupBox(title)
@@ -501,13 +514,17 @@ class LensCorrectionTab(QWidget):
     def _update_text(self):
         if self._base_corrected_img is None:
             return
-        # Copia da imagem base corrigida para queimar o texto
-        self.undistorted_img = self._burn_texts(self._base_corrected_img.copy())
+        # undistorted_img armazena a imagem corrigida SEM texto
+        self.undistorted_img = self._base_corrected_img.copy()
+        # Textos são desenhados apenas na visualização (overlay)
         self._draw_overlay()
 
-    def _burn_texts(self, img_array: np.ndarray) -> np.ndarray:
-        img_uint8 = (img_array * 255).astype(np.uint8)
+    def _draw_texts_on(self, img_uint8: np.ndarray):
+        """Desenha os textos configurados diretamente sobre um array uint8 (in-place).
         
+        Este método é usado tanto para exibição quanto para salvar/enviar,
+        garantindo que os textos fiquem sempre por cima, sem distorção.
+        """
         def draw_cfg(cfg, is_left):
             if not cfg["text"]: return
             font = cv2.FONT_HERSHEY_DUPLEX
@@ -537,7 +554,6 @@ class LensCorrectionTab(QWidget):
             # Background
             pad = int(10 * scale)
             bg_color = cfg["bg"]
-            # Converter RGB para OpenCV
             cv2.rectangle(img_uint8, (max(0, x - pad), max(0, y - th - pad)), 
                           (min(w, x + tw + pad), min(h, y + baseline + pad)), bg_color, -1)
             
@@ -547,5 +563,3 @@ class LensCorrectionTab(QWidget):
             
         draw_cfg(self.txt_e_cfg, True)
         draw_cfg(self.txt_d_cfg, False)
-        
-        return img_uint8.astype(np.float64) / 255.0

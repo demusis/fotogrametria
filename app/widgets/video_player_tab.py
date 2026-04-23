@@ -76,7 +76,7 @@ class VideoPlayerTab(QWidget):
         controls_layout.addWidget(nav_group)
         
         # Extração
-        ext_group = QGroupBox("Extração Rigorosa")
+        ext_group = QGroupBox("Extração")
         ext_layout = QVBoxLayout(ext_group)
         
         self.btn_mark_l = QPushButton("Salvar p/ Esq.")
@@ -92,7 +92,7 @@ class VideoPlayerTab(QWidget):
         ext_layout.addWidget(self.btn_mark_r)
         ext_layout.addWidget(self.lbl_mark_r)
         
-        self.btn_hash = QPushButton("Hash e Media Info")
+        self.btn_hash = QPushButton("Hash e informações (pasta)")
         self.btn_hash.clicked.connect(self._generate_report)
         ext_layout.addWidget(self.btn_hash)
         
@@ -113,6 +113,21 @@ class VideoPlayerTab(QWidget):
         
         main_layout.addWidget(controls_panel)
         main_layout.addWidget(self.viewer, stretch=1)
+
+        # Atalhos de Teclado restritos a esta aba
+        from PySide6.QtGui import QShortcut, QKeySequence
+        
+        shortcut_left = QShortcut(QKeySequence(Qt.Key.Key_Left), self)
+        shortcut_left.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        shortcut_left.activated.connect(self._step_back)
+        
+        shortcut_right = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
+        shortcut_right.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        shortcut_right.activated.connect(self._step_forward)
+        
+        shortcut_space = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
+        shortcut_space.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        shortcut_space.activated.connect(self._toggle_play)
 
     def set_theme(self, theme: str):
         if theme == "dark":
@@ -145,6 +160,23 @@ class VideoPlayerTab(QWidget):
             lbl.setStyleSheet(lbl_clr)
             
         self.viewer._apply_theme(theme)
+
+    def set_filter_callback(self, callback):
+        self._filter_callback = callback
+
+    def _display_frame(self, frame):
+        if frame is None:
+            return
+        self._raw_frame = frame.copy()
+        if hasattr(self, '_filter_callback') and self._filter_callback:
+            frame = self._filter_callback(frame)
+        self.current_frame_img = frame
+        self.viewer.carregar_imagem(frame)
+
+    def refresh_frame(self):
+        """Re-exibe o quadro atual reaplicando os filtros ativos."""
+        if hasattr(self, '_raw_frame') and self._raw_frame is not None:
+            self._display_frame(self._raw_frame)
 
     def _load_video(self):
         path, _ = QFileDialog.getOpenFileName(self, "Selecionar Vídeo", "", "Videos (*.mp4 *.avi *.mkv *.mov)")
@@ -181,8 +213,7 @@ class VideoPlayerTab(QWidget):
         if not self.player: return
         arr = self.player.read_next_frame()
         if arr is not None:
-            self.current_frame_img = arr
-            self.viewer.carregar_imagem(arr)
+            self._display_frame(arr)
             
             # Update slider sem disparar o signal
             current_frame_idx = int(self.current_time_sec * self.player.fps)
@@ -246,67 +277,135 @@ class VideoPlayerTab(QWidget):
             self.lbl_mark_r.setText(f"Dir: Frm {frame_idx} (T={self.time_dir:.3f}s)")
             
     def _generate_report(self):
-        if not self.player or not getattr(self.player, 'path', None):
-            QMessageBox.warning(self, "Aviso", "Carregue um vídeo primeiro.")
+        folder_path = QFileDialog.getExistingDirectory(self, "Selecionar Pasta para Análise")
+        if not folder_path:
             return
 
-        out_path, _ = QFileDialog.getSaveFileName(self, "Salvar Relatório Forense", "relatorio_midia.pdf", "PDF (*.pdf)")
+        out_path, _ = QFileDialog.getSaveFileName(self, "Salvar Relatório Forense", "relatorio_midia_pasta.pdf", "PDF (*.pdf)")
         if not out_path:
             return
 
         import hashlib
         import subprocess
+        import os
         from PySide6.QtGui import QTextDocument
         from PySide6.QtPrintSupport import QPrinter
+        from PySide6.QtWidgets import QApplication, QProgressDialog
 
         self.btn_hash.setText("Gerando...")
         self.btn_hash.setEnabled(False)
+        
+        # Encontrar todos os arquivos primeiro para a barra de progresso
+        todos_arquivos = []
+        for root, dirs, files in os.walk(folder_path):
+            for f in files:
+                todos_arquivos.append(os.path.join(root, f))
+                
+        total = len(todos_arquivos)
+        if total == 0:
+            QMessageBox.information(self, "Aviso", "Nenhum arquivo encontrado na pasta selecionada.")
+            self.btn_hash.setEnabled(True)
+            self.btn_hash.setText("Hash e informações (pasta)")
+            return
+
+        progress = QProgressDialog("Analisando arquivos...", "Cancelar", 0, total, self)
+        progress.setWindowTitle("Relatório de Pasta")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
 
         try:
-            sha512 = hashlib.sha512()
-            with open(self.player.path, "rb") as f:
-                for chunk in iter(lambda: f.read(4096 * 1024), b""):
-                    sha512.update(chunk)
-            hash_str = sha512.hexdigest()
-
-            try:
-                mi_res = subprocess.run(["mediainfo", self.player.path], capture_output=True, text=True, timeout=10)
-                if mi_res.returncode == 0 and mi_res.stdout.strip():
-                    media_text = mi_res.stdout.strip()
-                else:
-                    raise Exception()
-            except:
-                mi_res = subprocess.run([
-                    "ffprobe", "-v", "quiet", "-show_format", "-show_streams", self.player.path
-                ], capture_output=True, text=True, timeout=10)
-                media_text = mi_res.stdout.strip()
-
-            video_filename = os.path.basename(self.player.path)
-            html = f'''
-            <h2>Relatório de Análise de Mídia Digital</h2>
-            <hr>
-            <p><b>Arquivo:</b> {video_filename}</p>
-            <p><b>Hash SHA-512:</b></p>
-            <p style="font-family: monospace; font-size: 10px; word-wrap: break-word;">{hash_str}</p>
-            <br>
-            <p><b>MediaInfo / Metadados Estruturais:</b></p>
-            <pre style="font-size: 9px;">{media_text}</pre>
-            '''
-
-            doc = QTextDocument()
-            doc.setHtml(html)
+            html_parts = [
+                "<html><head><style>",
+                "body { font-family: Arial, sans-serif; font-size: 12pt; }",
+                "h2 { font-size: 16pt; }",
+                "p { font-size: 12pt; margin: 4pt 0; }",
+                ".hash-text { font-family: 'Courier New', monospace; font-size: 8pt; word-wrap: break-word; }",
+                ".metadata-block { font-family: 'Courier New', monospace; font-size: 8pt; background-color: #f8f9fa; border: 1px solid #ccc; padding: 6pt; white-space: pre-wrap; }",
+                "</style></head><body>",
+                "<h2>Relatório de Análise de Mídia Digital (Pasta)</h2>",
+                f"<p><b>Pasta Analisada:</b> {folder_path}</p>",
+                f"<p><b>Total de Arquivos:</b> {total}</p>",
+                "<hr>"
+            ]
             
-            printer = QPrinter()
-            printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
-            printer.setOutputFileName(out_path)
-            doc.print_(printer)
+            for i, file_path in enumerate(todos_arquivos):
+                if progress.wasCanceled():
+                    break
+                    
+                progress.setValue(i)
+                progress.setLabelText(f"Analisando arquivo {i+1} de {total}...\n{os.path.basename(file_path)}")
+                QApplication.processEvents()
 
-            QMessageBox.information(self, "Sucesso", "Relatório PDF gerado com sucesso!")
+                # Calcular hash
+                sha512 = hashlib.sha512()
+                try:
+                    with open(file_path, "rb") as f:
+                        for chunk in iter(lambda: f.read(4096 * 1024), b""):
+                            sha512.update(chunk)
+                    hash_str = sha512.hexdigest()
+                except Exception as e:
+                    hash_str = f"Erro de leitura: {e}"
+                
+                # Tentar mediainfo ou ffprobe
+                media_text = "N/A"
+                try:
+                    mi_res = subprocess.run(["mediainfo", file_path], capture_output=True, text=True, timeout=5)
+                    if mi_res.returncode == 0 and mi_res.stdout.strip():
+                        media_text = mi_res.stdout.strip()
+                    else:
+                        raise Exception()
+                except:
+                    try:
+                        mi_res = subprocess.run([
+                            "ffprobe", "-v", "quiet", "-show_format", "-show_streams", file_path
+                        ], capture_output=True, text=True, timeout=5)
+                        if mi_res.stdout.strip():
+                            media_text = mi_res.stdout.strip()
+                    except:
+                        pass
+                        
+                html_parts.append(f"<div style='margin-bottom: 12pt; page-break-inside: avoid;'>")
+                html_parts.append(f"<p><b>Arquivo:</b> {file_path}</p>")
+                html_parts.append("<p><b>Hash SHA-512:</b></p>")
+                html_parts.append(f"<p class='hash-text'>{hash_str}</p>")
+                html_parts.append("<p><b>Metadados:</b></p>")
+                html_parts.append(f"<pre class='metadata-block'>{media_text}</pre>")
+                html_parts.append("</div><hr>")
+
+            html_parts.append("</body></html>")
+
+            progress.setLabelText("Gerando PDF...")
+            progress.setValue(total)
+            QApplication.processEvents()
+
+            if not progress.wasCanceled():
+                from PySide6.QtCore import QMarginsF
+                from PySide6.QtGui import QPageSize, QPageLayout, QFont
+
+                doc = QTextDocument()
+                default_font = QFont("Arial", 12)
+                doc.setDefaultFont(default_font)
+                doc.setHtml("".join(html_parts))
+                
+                printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+                printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+                printer.setOutputFileName(out_path)
+                page_layout = QPageLayout(
+                    QPageSize(QPageSize.PageSizeId.A4),
+                    QPageLayout.Orientation.Portrait,
+                    QMarginsF(15, 15, 15, 15)
+                )
+                printer.setPageLayout(page_layout)
+                doc.setPageSize(printer.pageRect(QPrinter.Unit.Point).size())
+                doc.print_(printer)
+
+                QMessageBox.information(self, "Sucesso", "Relatório PDF da pasta gerado com sucesso!")
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Falha ao gerar o relatório:\n{e}")
         finally:
+            progress.close()
             self.btn_hash.setEnabled(True)
-            self.btn_hash.setText("Hash e Media Info")
+            self.btn_hash.setText("Hash e informações (pasta)")
             
     def _send_images(self):
         if self.img_esq is None or self.img_dir is None:

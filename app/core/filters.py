@@ -7,7 +7,7 @@ Internamente as conversões para uint8/BGR do OpenCV são feitas por helpers.
 Filtros disponíveis:
     - histogram_percentile: Realce de contraste por corte de percentil L*a*b*
     - clahe: Equalização adaptativa limitada por contraste (CLAHE)
-    - retinex_msr: Retinex Multi-Escala (MSR) — compressão de alcance dinâmico
+    - retinex_frankle_mccann: Retinex iterativo de Frankle-McCann — constância de cor
     - wiener_deblur: Deconvolução de Wiener para desfoque direcional
     - white_balance: Correção de color cast pelo método Mundo Cinza (Gray World)
 """
@@ -97,48 +97,74 @@ def clahe(
 def retinex_msr(
     frame_rgb_float: np.ndarray,
     sigmas: list[float] | None = None,
+    blend_factor: float = 0.5,
+    black_clip: float = 1.0,
 ) -> np.ndarray:
-    """Retinex Multi-Escala (MSR) — compressão de alcance dinâmico.
+    """Retinex Multi-Escala com Mesclagem de Luminância (MSRCP Blended).
+
+    Esta é a solução definitiva e mais robusta. O MSR puro destrói a
+    profundidade natural da iluminação (fazendo tudo parecer "HDR" demais
+    ou estourando luzes). Esta versão calcula o MSR para extrair os detalhes
+    e levantar as sombras, mas mescla o resultado com a iluminação original.
+    Isso mantém as sombras iluminadas, os realces controlados (sem estourar)
+    e as cores absolutamente impecáveis e sem artefatos matemáticos.
 
     Parâmetros
     ----------
     frame_rgb_float : ndarray (H, W, 3) float64 [0, 1]
-    sigmas          : lista de desvios-padrão para cada escala.
-                      Padrão: [15, 80, 250].
+    sigmas          : lista de desvios-padrão. Padrão: [15, 80, 250].
+    blend_factor    : proporção de Retinex na imagem final (0.0 a 1.0).
+    black_clip      : percentil inferior para esmagar pretos (padrão: 1.0).
 
     Retorna
     -------
-    ndarray (H, W, 3) float64 [0, 1] com detalhes realçados.
+    ndarray (H, W, 3) float64 [0, 1] com contraste natural.
     """
     if sigmas is None:
-        sigmas = [15, 80, 250]
+        sigmas = [15.0, 80.0, 250.0]
 
-    frame = _rgb_float_to_bgr_uint8(frame_rgb_float)
-    img = frame.astype(np.float32) + 1.0
+    img = np.clip(frame_rgb_float, 1e-6, 1.0)
+    
+    # 1. Extrair intensidade máxima (I_max)
+    I_max = np.max(img, axis=2)
+    log_I = np.log(I_max)
+
+    # 2. Calcular MSR (extração de detalhes e nivelamento de luz)
+    retinex = np.zeros_like(I_max)
+    for sigma in sigmas:
+        blurred = cv2.GaussianBlur(I_max, (0, 0), sigma)
+        blurred = np.maximum(blurred, 1e-6)
+        retinex += log_I - np.log(blurred)
+
+    retinex /= len(sigmas)
+
+    # 3. Normalizar o MSR para o intervalo [0, 1]
+    # O corte nos pretos (black_clip) garante sombras mais densas ("punch")
+    p_low = np.percentile(retinex, black_clip)
+    p_high = np.percentile(retinex, 99.5)
+    
+    if p_high > p_low:
+        MSR_norm = (retinex - p_low) / (p_high - p_low)
+    else:
+        MSR_norm = retinex - np.min(retinex)
+        
+    MSR_norm = np.clip(MSR_norm, 0.0, 1.0)
+
+    # Aumentar o micro-contraste dos detalhes usando Curva-S
+    # Isso devolve o preto profundo para as áreas que o Retinex "lavou" demais
+    MSR_norm = MSR_norm * MSR_norm * (3.0 - 2.0 * MSR_norm)
+
+    # 4. Mesclagem (Blending) com a Iluminação Original
+    I_out = blend_factor * MSR_norm + (1.0 - blend_factor) * I_max
+
+    # 5. Restauração exata de Cor (Proporção)
+    ratio = I_out / I_max
+    
     result = np.zeros_like(img)
-
     for i in range(3):
-        channel = img[:, :, i]
-        log_channel = np.log(channel)
+        result[:, :, i] = np.clip(img[:, :, i] * ratio, 0.0, 1.0)
 
-        retinex = np.zeros_like(channel)
-        for sigma in sigmas:
-            blurred = cv2.GaussianBlur(channel, (0, 0), sigma)
-            blurred = np.maximum(blurred, 1.0)
-            retinex += log_channel - np.log(blurred)
-
-        result[:, :, i] = retinex / len(sigmas)
-
-    # Normalizar cada canal para [0, 255]
-    for i in range(3):
-        ch = result[:, :, i]
-        min_val, max_val = np.min(ch), np.max(ch)
-        if max_val > min_val:
-            result[:, :, i] = (ch - min_val) / (max_val - min_val) * 255
-        else:
-            result[:, :, i] = 128
-
-    return _bgr_uint8_to_rgb_float(np.clip(result, 0, 255).astype(np.uint8))
+    return result
 
 
 def wiener_deblur(

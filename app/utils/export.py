@@ -91,7 +91,10 @@ def exportar_zip(
             buf = io.StringIO()
             writer = csv.DictWriter(
                 buf,
-                fieldnames=["grupo", "resultado", "skewness_stat", "skewness_p", "kurtosis_stat", "kurtosis_p"],
+                fieldnames=[
+                    "grupo", "N", "resultado", "skewness_stat", "skewness_p", 
+                    "kurtosis_stat", "kurtosis_p", "shapiro_x_p", "shapiro_y_p"
+                ],
                 delimiter=",",
                 quoting=csv.QUOTE_NONNUMERIC,
             )

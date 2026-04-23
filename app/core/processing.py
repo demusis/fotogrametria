@@ -62,10 +62,12 @@ class MardiaResult:
     skewness_p: float
     kurtosis_stat: float
     kurtosis_p: float
+    shapiro_x_p: float = 1.0
+    shapiro_y_p: float = 1.0
 
     @property
     def is_normal(self) -> bool:
-        return self.skewness_p > 0.05 and self.kurtosis_p > 0.05
+        return self.skewness_p > 0.05 and self.kurtosis_p > 0.05 and self.shapiro_x_p > 0.05 and self.shapiro_y_p > 0.05
 
     @property
     def label(self) -> str:
@@ -99,6 +101,11 @@ def teste_mardia(data: np.ndarray) -> MardiaResult:
     # Assimetria de Mardia
     b1p = np.sum(D ** 3) / (n ** 2)
     skew_stat = n * b1p / 6.0
+    # Correção de pequena amostra para assimetria (Mardia, 1974)
+    if n < 20:
+        k = ((p + 1) * (n + 1) * (n + 3)) / (n * (((n + 1) * (p + 1)) - 6))
+        skew_stat *= k
+
     skew_df = p * (p + 1) * (p + 2) / 6.0
     skew_p = 1.0 - stats.chi2.cdf(skew_stat, skew_df)
 
@@ -112,11 +119,20 @@ def teste_mardia(data: np.ndarray) -> MardiaResult:
         kurt_stat = 0.0
     kurt_p = 2.0 * (1.0 - stats.norm.cdf(abs(kurt_stat)))
 
+    # Shapiro-Wilk univariado (correção para baixa potência de Mardia em N pequeno)
+    try:
+        _, p_x = stats.shapiro(data[:, 0])
+        _, p_y = stats.shapiro(data[:, 1])
+    except Exception:
+        p_x, p_y = 1.0, 1.0
+
     return MardiaResult(
         skewness_stat=float(skew_stat),
         skewness_p=float(skew_p),
         kurtosis_stat=float(kurt_stat),
         kurtosis_p=float(kurt_p),
+        shapiro_x_p=float(p_x),
+        shapiro_y_p=float(p_y),
     )
 
 
