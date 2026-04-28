@@ -455,6 +455,10 @@ class LensCorrectionTab(QWidget):
         
         txt_input = QLineEdit()
         txt_input.setPlaceholderText("Digite o texto...")
+        if is_left:
+            self.txt_input_e = txt_input
+        else:
+            self.txt_input_d = txt_input
         
         sz_spin = QSpinBox()
         sz_spin.setRange(8, 200)
@@ -518,6 +522,12 @@ class LensCorrectionTab(QWidget):
         self.undistorted_img = self._base_corrected_img.copy()
         # Textos são desenhados apenas na visualização (overlay)
         self._draw_overlay()
+
+    def set_suggested_texts(self, txt_esq: str, txt_dir: str):
+        if hasattr(self, 'txt_input_e') and txt_esq:
+            self.txt_input_e.setText(txt_esq)
+        if hasattr(self, 'txt_input_d') and txt_dir:
+            self.txt_input_d.setText(txt_dir)
 
     def _draw_texts_on(self, img_uint8: np.ndarray):
         """Desenha os textos configurados diretamente sobre um array uint8 (in-place).

@@ -20,7 +20,8 @@ def gerar_pdf_academico(
     resultados_mardia: list[dict] | None,
     audit_log: list[str] | None,
     video_info: dict | None = None,
-    regression_metrics: dict | None = None
+    regression_metrics: dict | None = None,
+    veiculo_id: str = ""
 ):
     """
     Gera e salva um relatório em PDF estruturado academicamente
@@ -65,6 +66,8 @@ def gerar_pdf_academico(
         tex.append(r"\maketitle")
         
         tex.append(r"\section{Introdução}")
+        if veiculo_id:
+            tex.append(rf"\textbf{{Identificação do Veículo:}} {sanitize(veiculo_id)} \\")
         
         import textwrap
         def wrap_verbatim(text, width=70):
@@ -182,7 +185,7 @@ def gerar_pdf_academico(
             
         if resultados_mardia:
             tex.append(r"\subsection{Análise de Normalidade (Testes de Mardia e Shapiro-Wilk)}")
-            tex.append(r"Para certificar a aderência estocástica das repetições, foram conduzidos testes de normalidade. O \textbf{Teste de Mardia} examina a normalidade multivariada avaliando a assimetria e a curtose dos dados em dimensões superiores. Para acomodar amostras pequenas, empregou-se o fator de correção de Mardia para baixa amostragem ($N < 20$) a fim de retificar possíveis falhas de inferência estatística (MARDIA, 1970; 1974). Adicionalmente, considerando a redução de sensibilidade do teste de Mardia em amostras reduzidas, efetuou-se a verificação univariada das coordenadas $X$ e $Y$ por intermédio do teste de \textbf{Shapiro-Wilk}, o qual apresenta poder estatístico adequado para amostras com $N < 50$ (SHAPIRO; WILK, 1965). O nível de significância referencial estipulado foi de $\alpha = 0.05$.")
+            tex.append(r"Para certificar a aderência estocástica das repetições, foram conduzidos testes de normalidade. O \textbf{Teste de Mardia} examina a normalidade multivariada avaliando a assimetria e a curtose dos dados em dimensões superiores. Para acomodar amostras pequenas, empregou-se o fator de correção de Mardia para baixa amostragem ($N < 20$) a fim de retificar possíveis falhas de inferência estatística (MARDIA, 1970; 1974). Adicionalmente, considerando a redução de sensibilidade do teste de Mardia em amostras reduzidas, efetuou-se a verificação univariada das coordenadas $X$ e $Y$ por intermédio do teste de \textbf{Shapiro-Wilk}, o qual apresenta poder estatístico adequado para amostras com $N < 50$ (SHAPIRO; WILK, 1965). O nível de significância referencial estipulado foi de $\alpha = 0.05$. Cabe ressaltar que a averiguação da normalidade possui caráter estritamente descritivo e referencial. No presente escopo de análise, a aderência rigorosa à normalidade multivariada não se configura como premissa indispensável, uma vez que a propagação geométrica de incertezas baseia-se no Método de Monte Carlo, que é, por definição, um procedimento estocástico robusto de natureza não paramétrica (MANLY, 2006).")
             tex.append(r"\begin{table}[H]")
             tex.append(r"\centering")
             tex.append(r"\begin{tabular}{cccccc}")
@@ -237,18 +240,26 @@ def gerar_pdf_academico(
                     
                     if "tom_de_cinza" in nome_fig:
                         tex.append(r"Para análise espectral transversal ao plano focal, processou-se o perfil de intensidade luminosa ao longo da trajetória de regressão. O sinal analítico contínuo (linha sólida) foi delineado submetendo os dados brutos a uma rotina de suavização matemática por \textit{Spline} não paramétrico bidimensional. Este procedimento visa a mitigação das oscilações de alta frequência inerentes à matriz sensora digital, propiciando a identificação estrutural dos marcadores fiduciários sem comprometer o referencial espacial subjacente (DE BOOR, 1978).")
+                        titulo_bonito = nome_fig.replace("1_", "").replace("2_", "").replace("3_", "").replace("4_", "").replace(".png", "").replace("_", " ").title()
+                        caption_text = f"Representação referente a(o) {sanitize(titulo_bonito)}."
                     elif "densidade_pontos" in nome_fig:
                         tex.append(r"A dispersão dos pontos simulados via Método de Monte Carlo reflete a propagação das incertezas posicionais. A concentração de densidade em torno da trajetória central permite validar a convergência do modelo estocástico e a estabilidade da solução numérica frente às variações paramétricas das variáveis de entrada.")
+                        titulo_bonito = nome_fig.replace("1_", "").replace("2_", "").replace("3_", "").replace("4_", "").replace(".png", "").replace("_", " ").title()
+                        caption_text = f"Representação referente a(o) {sanitize(titulo_bonito)}."
                     elif "velocidade_estimada" in nome_fig:
                         tex.append(r"O histograma de frequências da velocidade estimada apresenta a distribuição probabilística da grandeza final. A curva de densidade sobreposta indica a forma da distribuição, possibilitando a extração dos percentis e da estimativa central, fundamentando o intervalo de confiança reportado para a velocidade do veículo.")
+                        caption_text = "Histograma, box-plot e intervalo de confiança da velocidade escalar média."
                     elif "deslocamento_estimado" in nome_fig:
                         tex.append(r"A distribuição do deslocamento espacial foi obtida através do processo iterativo de simulação. Este gráfico permite avaliar a precisão da medida de distância percorrida, consolidando a base de dados para o cálculo cinemático e a estimativa das incertezas associadas ao referencial métrico.")
+                        caption_text = "Frequência acumulada e intervalo de fonfiança para o deslocamento entre os quadros."
+                    else:
+                        titulo_bonito = nome_fig.replace("1_", "").replace("2_", "").replace("3_", "").replace("4_", "").replace(".png", "").replace("_", " ").title()
+                        caption_text = f"Representação referente a(o) {sanitize(titulo_bonito)}."
                         
-                    titulo_bonito = nome_fig.replace("1_", "").replace("2_", "").replace("3_", "").replace("4_", "").replace(".png", "").replace("_", " ").title()
                     tex.append(r"\begin{figure}[H]")
                     tex.append(r"\centering")
                     tex.append(rf"\includegraphics[width=1.0\textwidth,height=0.35\textheight,keepaspectratio]{{{safe_name}}}")
-                    tex.append(rf"\caption{{Representação referente a(o) {sanitize(titulo_bonito)}.}}")
+                    tex.append(rf"\caption{{{caption_text}}}")
                     tex.append(r"\end{figure}")
                     figura_idx += 1
         else:
@@ -293,6 +304,7 @@ def gerar_pdf_academico(
         tex.append(r"\item DE MUSIS, C. R.; DE MUSIS, I.; MARTINIS, B.; GROSS, T. J. A Aplicação do Método de Monte Carlo e Razão Cruzada Complexa na Reconstrução de Acidentes de Tráfego. \textit{Revista Brasileira de Criminalística}, v. 14, n. 3, p. 81-89, 2025.")
         tex.append(r"\item DEMING, W. E. \textit{Statistical adjustment of data}. New York: Wiley, 1943.")
         tex.append(r"\item LINNET, K. Evaluation of regression procedures for method comparison studies. \textit{Clinical Chemistry}, v. 39, n. 3, p. 424-432, 1993.")
+        tex.append(r"\item MANLY, B. F. J. \textit{Randomization, Bootstrap and Monte Carlo Methods in Biology}. 3. ed. Boca Raton: Chapman \& Hall/CRC, 2006.")
         tex.append(r"\item MARDIA, K. V. Measures of multivariate skewness and kurtosis with applications. \textit{Biometrika}, v. 57, n. 3, p. 519-530, 1970.")
         tex.append(r"\item MARDIA, K. V. Applications of some measures of multivariate skewness and kurtosis in testing normality and robustness studies. \textit{Sankhyā: The Indian Journal of Statistics, Series B}, v. 36, n. 2, p. 115-128, 1974.")
         tex.append(r"\item SHAPIRO, S. S.; WILK, M. B. An analysis of variance test for normality (complete samples). \textit{Biometrika}, v. 52, n. 3/4, p. 591-611, 1965.")

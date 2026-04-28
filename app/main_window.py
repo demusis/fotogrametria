@@ -1123,7 +1123,7 @@ class MainWindow(QMainWindow):
                 try:
                     import subprocess
                     cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=display_aspect_ratio", "-of", "default=noprint_wrappers=1:nokey=1", self._video_path_used]
-                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
                     dar_str = res.stdout.strip()
                     if dar_str and ":" in dar_str and dar_str != "0:1":
                         num, den = map(float, dar_str.split(":"))
@@ -1170,7 +1170,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Razão de aspecto corrigida para {target_ratio:.3f} ({new_w}x{new_h}).")
 
     def _open_filter_manager(self):
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton
         from PySide6.QtCore import Qt
 
         dlg = QDialog(self)
@@ -1195,11 +1195,40 @@ class MainWindow(QMainWindow):
         list_wgt.itemChanged.connect(self._on_filter_item_changed)
         layout.addWidget(list_wgt)
         
+        btns_layout = QHBoxLayout()
+        
+        btn_remove_sel = QPushButton("Remover Selecionado")
+        btn_remove_sel.clicked.connect(lambda: self._remove_selected_filter(list_wgt))
+        btns_layout.addWidget(btn_remove_sel)
+        
         btn_clear = QPushButton("Remover Todos")
         btn_clear.clicked.connect(lambda: self._clear_all_filters(dlg))
-        layout.addWidget(btn_clear)
+        btns_layout.addWidget(btn_clear)
+        
+        layout.addLayout(btns_layout)
         
         dlg.exec()
+        
+    def _remove_selected_filter(self, list_wgt):
+        from PySide6.QtCore import Qt
+        current_item = list_wgt.currentItem()
+        if not current_item:
+            return
+        f_id = current_item.data(Qt.ItemDataRole.UserRole)
+        for i, f in enumerate(self.filter_chain):
+            if f["id"] == f_id:
+                name = f['readable']
+                del self.filter_chain[i]
+                self._log_audit(f"Filtro '{name}' foi removido da pipeline de Vídeo.")
+                break
+        
+        list_wgt.blockSignals(True)
+        row = list_wgt.row(current_item)
+        list_wgt.takeItem(row)
+        list_wgt.blockSignals(False)
+        
+        if hasattr(self.video_tab, 'refresh_frame'):
+            self.video_tab.refresh_frame()
         
     def _on_filter_item_changed(self, item):
         from PySide6.QtCore import Qt
@@ -1225,6 +1254,8 @@ class MainWindow(QMainWindow):
     def _on_combiner_send(self, img_array: np.ndarray):
         """Recebe imagem mesclada e a envia para a aba de correção."""
         self.lens_correction_tab.receber_imagem(img_array)
+        if hasattr(self, '_last_time_esq') and hasattr(self, '_last_time_dir'):
+            self.lens_correction_tab.set_suggested_texts(f"{self._last_time_esq:.3f}s", f"{self._last_time_dir:.3f}s")
         self.tabs.setCurrentWidget(self.lens_correction_tab)
         
     def _on_lens_send(self, img_array: np.ndarray):
@@ -1239,6 +1270,9 @@ class MainWindow(QMainWindow):
 
     def _on_video_pair_sent(self, img_esq: np.ndarray, img_dir: np.ndarray, time_esq: float, time_dir: float):
         """Recebe par do extrator de video e passa p/ Combinador, atualizando os campos de tempo"""
+        self._last_time_esq = time_esq
+        self._last_time_dir = time_dir
+        
         self.combiner_tab.img1_array = img_esq.copy()
         self.combiner_tab.img2_array = img_dir.copy()
         self.combiner_tab.lbl_file1.setText(f"FFV: Esq (T={time_esq:.3f}s)")
@@ -1758,7 +1792,7 @@ class MainWindow(QMainWindow):
                     hash_str = sha512.hexdigest()
                     
                     try:
-                        mi_res = subprocess.run(["mediainfo", self._video_path_used], capture_output=True, text=True, timeout=10)
+                        mi_res = subprocess.run(["mediainfo", self._video_path_used], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
                         if mi_res.returncode == 0 and mi_res.stdout.strip():
                             media_text = mi_res.stdout.strip()
                         else:
@@ -1766,7 +1800,7 @@ class MainWindow(QMainWindow):
                     except:
                         mi_res = subprocess.run([
                             "ffprobe", "-v", "quiet", "-show_format", "-show_streams", self._video_path_used
-                        ], capture_output=True, text=True, timeout=10)
+                        ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
                         media_text = mi_res.stdout.strip()
                     
                     video_info = {
@@ -1777,6 +1811,10 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     self._log_audit(f"Erro ao obter informacoes do video para relatorio: {e}")
             
+            veiculo_id = ""
+            if hasattr(self.video_tab, 'txt_veiculo'):
+                veiculo_id = self.video_tab.txt_veiculo.text().strip()
+
             gerar_pdf_academico(
                 caminho_saida=caminho,
                 dados_pontos=dados_pontos if dados_pontos else None,
@@ -1787,7 +1825,8 @@ class MainWindow(QMainWindow):
                 resultados_mardia=resultados_mardia,
                 audit_log=self._audit_log if self._audit_log else None,
                 video_info=video_info,
-                regression_metrics=getattr(self, '_regression_metrics', None)
+                regression_metrics=getattr(self, '_regression_metrics', None),
+                veiculo_id=veiculo_id
             )
             
             QMessageBox.information(self, "Relatorio", f"Relatorio gerado com sucesso!\n{caminho}")

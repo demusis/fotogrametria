@@ -3,7 +3,7 @@ import numpy as np
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QLabel,
-    QFileDialog, QMessageBox, QGroupBox
+    QFileDialog, QMessageBox, QGroupBox, QLineEdit
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 
@@ -43,6 +43,10 @@ class VideoPlayerTab(QWidget):
         self.btn_load = QPushButton("Carregar Vídeo (FFmpeg)")
         self.btn_load.clicked.connect(self._load_video)
         controls_layout.addWidget(self.btn_load)
+
+        self.txt_veiculo = QLineEdit()
+        self.txt_veiculo.setPlaceholderText("Identificação do Veículo (ex: Placa, Modelo)")
+        controls_layout.addWidget(self.txt_veiculo)
         
         self.lbl_info = QLabel("Nenhum vídeo carregado.")
         self.lbl_info.setWordWrap(True)
@@ -158,6 +162,7 @@ class VideoPlayerTab(QWidget):
         lbl_clr = "color: #e0e0e0;" if theme == "dark" else "color: #333333;"
         for lbl in [self.lbl_info, self.lbl_time, self.lbl_mark_l, self.lbl_mark_r]:
             lbl.setStyleSheet(lbl_clr)
+        self.txt_veiculo.setStyleSheet("background-color: #1a1a2e; color: #e0e0e0; border: 1px solid #30363d;" if theme == "dark" else "")
             
         self.viewer._apply_theme(theme)
 
@@ -261,16 +266,16 @@ class VideoPlayerTab(QWidget):
             self._seek_to(0.0)
 
     def _mark_left(self):
-        if self.current_frame_img is not None:
-            self.img_esq = self.current_frame_img.copy()
+        if hasattr(self, '_raw_frame') and self._raw_frame is not None:
+            self.img_esq = self._raw_frame.copy()
             frame_idx = int(self.current_time_sec * self.player.fps) - 1
             if frame_idx < 0: frame_idx = 0
             self.time_esq = self.player.get_time_for_frame(frame_idx)
             self.lbl_mark_l.setText(f"Esq: Frm {frame_idx} (T={self.time_esq:.3f}s)")
 
     def _mark_right(self):
-        if self.current_frame_img is not None:
-            self.img_dir = self.current_frame_img.copy()
+        if hasattr(self, '_raw_frame') and self._raw_frame is not None:
+            self.img_dir = self._raw_frame.copy()
             frame_idx = int(self.current_time_sec * self.player.fps) - 1
             if frame_idx < 0: frame_idx = 0
             self.time_dir = self.player.get_time_for_frame(frame_idx)
@@ -349,7 +354,7 @@ class VideoPlayerTab(QWidget):
                 # Tentar mediainfo ou ffprobe
                 media_text = "N/A"
                 try:
-                    mi_res = subprocess.run(["mediainfo", file_path], capture_output=True, text=True, timeout=5)
+                    mi_res = subprocess.run(["mediainfo", file_path], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
                     if mi_res.returncode == 0 and mi_res.stdout.strip():
                         media_text = mi_res.stdout.strip()
                     else:
@@ -358,7 +363,7 @@ class VideoPlayerTab(QWidget):
                     try:
                         mi_res = subprocess.run([
                             "ffprobe", "-v", "quiet", "-show_format", "-show_streams", file_path
-                        ], capture_output=True, text=True, timeout=5)
+                        ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
                         if mi_res.stdout.strip():
                             media_text = mi_res.stdout.strip()
                     except:
@@ -411,4 +416,12 @@ class VideoPlayerTab(QWidget):
         if self.img_esq is None or self.img_dir is None:
             QMessageBox.warning(self, "Aviso", "Extraia e marque as duas imagens (Esq. e Dir.) antes de enviar!")
             return
-        self.enviar_par_imagens.emit(self.img_esq, self.img_dir, float(self.time_esq), float(self.time_dir))
+            
+        final_esq = self.img_esq.copy()
+        final_dir = self.img_dir.copy()
+        
+        if hasattr(self, '_filter_callback') and self._filter_callback:
+            final_esq = self._filter_callback(final_esq)
+            final_dir = self._filter_callback(final_dir)
+            
+        self.enviar_par_imagens.emit(final_esq, final_dir, float(self.time_esq), float(self.time_dir))

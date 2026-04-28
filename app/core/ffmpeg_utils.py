@@ -45,7 +45,7 @@ class FFmpegPlayer:
             "ffprobe", "-v", "quiet", "-print_format", "json",
             "-show_format", "-show_streams", self.path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode != 0:
             raise RuntimeError("Erro ao ler metadata com ffprobe.")
 
@@ -96,7 +96,7 @@ class FFmpegPlayer:
                 "-show_entries", "frame=pkt_pts_time", "-of", "csv=p=0",
                 self.path,
             ]
-            res = subprocess.run(cmd_pts, capture_output=True, text=True, timeout=15)
+            res = subprocess.run(cmd_pts, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
             if res.returncode == 0:
                 self.pts_list = [
                     float(x.strip())
