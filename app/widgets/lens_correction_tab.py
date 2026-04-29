@@ -416,6 +416,8 @@ class LensCorrectionTab(QWidget):
             return
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Imagem", "imagem_corrigida.png", "PNG (*.png)")
         if path:
+            if not path.lower().endswith('.png'):
+                path += '.png'
             try:
                 # Aplicar textos por cima da imagem final no momento de salvar
                 final_img = self._compose_final_image()
@@ -425,7 +427,7 @@ class LensCorrectionTab(QWidget):
                 success, encoded_image = cv2.imencode(".png", img_bgr)
                 if success:
                     with open(path, "wb") as f:
-                        f.write(encoded_image)
+                        f.write(encoded_image.tobytes())
                     QMessageBox.information(self, "Sucesso", "Imagem salva com sucesso!")
                 else:
                     QMessageBox.critical(self, "Erro", "Erro ao codificar a imagem para PNG.")

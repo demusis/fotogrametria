@@ -1715,6 +1715,9 @@ class MainWindow(QMainWindow):
         if not caminho:
             return
 
+        if not caminho.lower().endswith('.zip'):
+            caminho += '.zip'
+
         try:
             figuras = self.results_panel.get_figuras()
 
@@ -1764,6 +1767,9 @@ class MainWindow(QMainWindow):
         )
         if not caminho:
             return
+
+        if not caminho.lower().endswith('.pdf'):
+            caminho += '.pdf'
 
         try:
             self.statusBar().showMessage("Gerando relatorio PDF...")

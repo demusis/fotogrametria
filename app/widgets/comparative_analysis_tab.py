@@ -205,6 +205,8 @@ class ImageCombinerTab(QWidget):
             return
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Imagem", "imagem_combinada.png", "PNG (*.png)")
         if path:
+            if not path.lower().endswith('.png'):
+                path += '.png'
             try:
                 import cv2
                 img_uint8 = (self.combined_img_cropped * 255).astype(np.uint8)
@@ -212,7 +214,7 @@ class ImageCombinerTab(QWidget):
                 success, encoded_image = cv2.imencode(".png", img_bgr)
                 if success:
                     with open(path, "wb") as f:
-                        f.write(encoded_image)
+                        f.write(encoded_image.tobytes())
                     QMessageBox.information(self, "Sucesso", "Imagem salva com sucesso!")
                 else:
                     QMessageBox.critical(self, "Erro", "Erro ao codificar a imagem.")
